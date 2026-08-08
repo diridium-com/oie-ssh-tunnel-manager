@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- Copyright (c) 2026 Diridium Technologies Inc. -->
+
+<pluginMetaData path="oie-ssh-tunnel-manager">
+    <name>SSH Tunnel Manager</name>
+    <author>Diridium Technologies Inc.</author>
+    <pluginVersion>${project.version}</pluginVersion>
+    <mirthVersion>${plugin.supported.mc.versions}</mirthVersion>
+    <url>https://diridium.com</url>
+    <description>Persistent SSH tunnels with local and reverse port forwards, managed by the engine instead of external ssh services.</description>
+
+    <serverClasses>
+        <string>com.diridium.oie.sshtunnel.SshTunnelServicePlugin</string>
+    </serverClasses>
+
+    <clientClasses>
+        <string>com.diridium.oie.sshtunnel.SshTunnelSettingsPanelPlugin</string>
+    </clientClasses>
+
+    <library type="SERVER" path="oie-ssh-tunnel-manager-server-${project.version}.jar" />
+    <library type="SHARED" path="oie-ssh-tunnel-manager-shared-${project.version}.jar" />
+    <library type="CLIENT" path="oie-ssh-tunnel-manager-client-${project.version}.jar" />
+
+    <apiProvider type="SERVLET_INTERFACE" name="com.diridium.oie.sshtunnel.SshTunnelServletInterface" />
+    <apiProvider type="SERVER_CLASS" name="com.diridium.oie.sshtunnel.SshTunnelServlet" />
+</pluginMetaData>

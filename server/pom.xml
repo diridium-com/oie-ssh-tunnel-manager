@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- Copyright (c) 2026 Diridium Technologies Inc. -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <artifactId>oie-ssh-tunnel-manager</artifactId>
+        <groupId>com.diridium</groupId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>oie-ssh-tunnel-manager-server</artifactId>
+    <name>SSH Tunnel Manager Server</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.diridium</groupId>
+            <artifactId>oie-ssh-tunnel-manager-shared</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <!-- The engine ships this exact jar in server-lib (global server classpath).
+             Never bundle it and never touch JSch's static config: the engine's SFTP
+             connector shares these classes. -->
+        <dependency>
+            <groupId>com.github.mwiede</groupId>
+            <artifactId>jsch</artifactId>
+            <version>${jsch.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit5.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- At-rest tunnel persistence uses a private, locked-down XStream (not
+             the engine's ObjectXMLSerializer, whose converter chain pulls Rhino
+             and more). The engine ships XStream at runtime, so provided scope
+             keeps it off the packaged zip while making it available to compile
+             and tests. Matches the engine's pinned version. -->
+        <dependency>
+            <groupId>com.thoughtworks.xstream</groupId>
+            <artifactId>xstream</artifactId>
+            <version>${xstream.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- OperationUtil.getOperationNamesForPermission scans the servlet
+             interface via Reflections; the engine bundles this at runtime but
+             publishes no Maven dep. Matches the engine's pinned version. It
+             pulls guava + javassist transitively for the test classpath. -->
+        <dependency>
+            <groupId>org.reflections</groupId>
+            <artifactId>reflections</artifactId>
+            <version>0.9.10</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
