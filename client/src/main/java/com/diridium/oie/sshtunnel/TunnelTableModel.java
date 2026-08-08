@@ -12,10 +12,11 @@ import javax.swing.table.AbstractTableModel;
 /** Table model for the tunnel list, joining each tunnel with its runtime status. */
 public class TunnelTableModel extends AbstractTableModel {
 
-    static final int COL_STATUS = 5;
     static final int COL_HOST_KEY = 4;
+    static final int COL_STATUS = 5;
 
-    private static final String[] COLUMNS = {"Name", "Endpoint", "Forwards", "Enabled", "Host Key", "Status"};
+    private static final String[] COLUMNS =
+            {"Name", "Endpoint", "Forwards", "Enabled", "Host Key", "Status", "Uptime", "Last Error"};
 
     private List<SshTunnel> tunnels = new ArrayList<>();
     private Map<String, SshTunnelStatus> statuses = Map.of();
@@ -96,27 +97,45 @@ public class TunnelTableModel extends AbstractTableModel {
     @Override
     public Object getValueAt(int row, int column) {
         var tunnel = tunnels.get(row);
+        var status = statuses.get(tunnel.getId());
         return switch (column) {
             case 0 -> tunnel.getName();
             case 1 -> tunnel.getEndpointDescription();
             case 2 -> tunnel.getForwards().size();
             case 3 -> tunnel.isEnabled() ? "Yes" : "No";
             case 4 -> tunnel.isVerifyHostKey() ? "Pinned" : "Unverified";
-            case COL_STATUS -> statusText(tunnel);
+            case COL_STATUS -> statusText(tunnel, status);
+            case 6 -> uptimeText(status);
+            case 7 -> status != null && status.getLastError() != null ? status.getLastError() : "";
             default -> "";
         };
     }
 
-    private String statusText(SshTunnel tunnel) {
-        var status = statuses.get(tunnel.getId());
+    private String statusText(SshTunnel tunnel, SshTunnelStatus status) {
         if (status == null) {
             return tunnel.isEnabled() ? TunnelState.DISCONNECTED.toString() : TunnelState.DISABLED.toString();
         }
-        var text = status.getState().toString();
-        if ((status.getState() == TunnelState.FAILED || status.getState() == TunnelState.RECONNECTING)
-                && status.getLastError() != null && !status.getLastError().isEmpty()) {
-            text += " - " + status.getLastError();
+        return status.getState().toString();
+    }
+
+    private static String uptimeText(SshTunnelStatus status) {
+        if (status == null || status.getState() != TunnelState.CONNECTED || status.getConnectedSince() <= 0) {
+            return "";
         }
-        return text;
+        return humanizeDuration(System.currentTimeMillis() - status.getConnectedSince());
+    }
+
+    static String humanizeDuration(long millis) {
+        long seconds = Math.max(0, millis / 1000);
+        long h = seconds / 3600;
+        long m = (seconds % 3600) / 60;
+        long s = seconds % 60;
+        if (h > 0) {
+            return h + "h " + m + "m";
+        }
+        if (m > 0) {
+            return m + "m " + s + "s";
+        }
+        return s + "s";
     }
 }

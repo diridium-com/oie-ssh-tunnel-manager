@@ -81,6 +81,38 @@ public class PortForward implements Serializable {
         return new PortForward(direction, bindHost, bindPort, destinationHost, destinationPort);
     }
 
+    /**
+     * True if this and {@code other} are both LOCAL forwards whose bind address
+     * would conflict on the engine host (same port, and overlapping bind host —
+     * a wildcard bind like 0.0.0.0 overlaps any host). Two such forwards can
+     * never both listen at once.
+     */
+    public boolean localBindCollidesWith(PortForward other) {
+        if (direction != ForwardDirection.LOCAL || other.direction != ForwardDirection.LOCAL) {
+            return false;
+        }
+        if (bindPort != other.bindPort) {
+            return false;
+        }
+        var a = normalizeBindHost(bindHost);
+        var b = normalizeBindHost(other.bindHost);
+        return a.equals("*") || b.equals("*") || a.equals(b);
+    }
+
+    private static String normalizeBindHost(String host) {
+        if (host == null) {
+            return "*";
+        }
+        var h = host.trim().toLowerCase();
+        if (h.isEmpty() || h.equals("0.0.0.0") || h.equals("::") || h.equals("*")) {
+            return "*";
+        }
+        if (h.equals("localhost")) {
+            return "127.0.0.1";
+        }
+        return h;
+    }
+
     /** Short one-line description for tables and log lines, e.g. "L 127.0.0.1:6661 -> vendor:6661". */
     public String describe() {
         var arrow = direction == ForwardDirection.LOCAL ? "L" : "R";

@@ -311,10 +311,49 @@ public class SshTunnelService {
             requirePort(forward.getDestinationPort(), "Forward destination port");
         }
 
+        // A test never persists, so uniqueness and cross-tunnel port collisions
+        // are irrelevant for it (selfId == "").
         if (!"".equals(selfId)) {
             for (var other : tunnels) {
                 if (!other.getId().equals(selfId) && other.getName().equalsIgnoreCase(tunnel.getName())) {
                     throw new IllegalArgumentException("A tunnel named '" + tunnel.getName() + "' already exists");
+                }
+            }
+            validateLocalForwardCollisions(tunnel, selfId);
+        }
+    }
+
+    /**
+     * Two local forwards can't bind the same host:port on the engine host, so a
+     * tunnel is rejected if any of its local forwards collides with another of
+     * its own, or with a local forward on any other tunnel (regardless of enabled
+     * state — the conflict is inherent and would just fail at connect time).
+     */
+    private void validateLocalForwardCollisions(SshTunnel tunnel, String selfId) {
+        var locals = tunnel.getForwards().stream()
+                .filter(f -> f.getDirection() == ForwardDirection.LOCAL)
+                .toList();
+
+        for (int i = 0; i < locals.size(); i++) {
+            for (int j = i + 1; j < locals.size(); j++) {
+                if (locals.get(i).localBindCollidesWith(locals.get(j))) {
+                    throw new IllegalArgumentException("Two local forwards bind the same address ("
+                            + locals.get(i).getBindHost() + ":" + locals.get(i).getBindPort() + ")");
+                }
+            }
+        }
+
+        for (var other : tunnels) {
+            if (other.getId().equals(selfId)) {
+                continue;
+            }
+            for (var otherForward : other.getForwards()) {
+                for (var local : locals) {
+                    if (local.localBindCollidesWith(otherForward)) {
+                        throw new IllegalArgumentException("Local forward " + local.getBindHost() + ":"
+                                + local.getBindPort() + " conflicts with tunnel '" + other.getName()
+                                + "', which already forwards that port on this host");
+                    }
                 }
             }
         }

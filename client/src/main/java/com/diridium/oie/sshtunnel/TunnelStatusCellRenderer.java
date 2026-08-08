@@ -9,13 +9,16 @@ import java.awt.Component;
 import javax.swing.JTable;
 import javax.swing.table.DefaultTableCellRenderer;
 
-/** Colors the Status and Host Key cells so state reads at a glance. */
+/**
+ * Colors only what needs attention: a Failed tunnel is red so it stands out in a
+ * list, and an Unverified host key is amber as a standing warning. Everything
+ * else (including Connected, Disabled, and a pinned host key) is plain text —
+ * the normal cases don't need a color, and coloring them just adds noise.
+ */
 public class TunnelStatusCellRenderer extends DefaultTableCellRenderer {
 
-    private static final Color GREEN = new Color(0x1B, 0x7F, 0x2B);
-    private static final Color AMBER = new Color(0xB8, 0x6E, 0x00);
     private static final Color RED = new Color(0xC0, 0x28, 0x28);
-    private static final Color GREY = new Color(0x70, 0x70, 0x70);
+    private static final Color AMBER = new Color(0xB8, 0x6E, 0x00);
 
     @Override
     public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -28,19 +31,10 @@ public class TunnelStatusCellRenderer extends DefaultTableCellRenderer {
         int modelRow = table.convertRowIndexToModel(row);
         int modelCol = table.convertColumnIndexToModel(column);
         if (modelCol == TunnelTableModel.COL_HOST_KEY) {
-            c.setForeground(model.isVerifiedAt(modelRow) ? GREEN : AMBER);
-        } else {
-            c.setForeground(colorFor(model.getStateAt(modelRow)));
+            c.setForeground(model.isVerifiedAt(modelRow) ? table.getForeground() : AMBER);
+        } else if (modelCol == TunnelTableModel.COL_STATUS) {
+            c.setForeground(model.getStateAt(modelRow) == TunnelState.FAILED ? RED : table.getForeground());
         }
         return c;
-    }
-
-    private static Color colorFor(TunnelState state) {
-        return switch (state) {
-            case CONNECTED -> GREEN;
-            case CONNECTING, RECONNECTING -> AMBER;
-            case FAILED -> RED;
-            case DISCONNECTED, DISABLED -> GREY;
-        };
     }
 }

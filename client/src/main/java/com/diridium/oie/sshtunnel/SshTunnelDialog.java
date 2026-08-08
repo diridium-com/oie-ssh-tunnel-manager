@@ -50,6 +50,7 @@ public class SshTunnelDialog extends JDialog {
     private final transient SshTunnelServletInterface servlet;
     private final transient SshTunnel tunnel;
     private final transient java.util.Set<String> existingNames;
+    private final transient java.util.List<PortForward> otherLocalForwards;
     private boolean saved;
 
     private JTextField nameField;
@@ -83,11 +84,12 @@ public class SshTunnelDialog extends JDialog {
     private JButton testButton;
 
     public SshTunnelDialog(Frame parent, SshTunnelServletInterface servlet, SshTunnel tunnel,
-            java.util.Set<String> existingNames) {
+            java.util.Set<String> existingNames, java.util.List<PortForward> otherLocalForwards) {
         super(parent, tunnel.getId() == null ? "New SSH Tunnel" : "Edit SSH Tunnel", true);
         this.servlet = servlet;
         this.tunnel = tunnel;
         this.existingNames = existingNames != null ? existingNames : java.util.Set.of();
+        this.otherLocalForwards = otherLocalForwards != null ? otherLocalForwards : java.util.List.of();
         buildUi();
         loadFromTunnel();
         updateAuthVisibility();
@@ -529,7 +531,8 @@ public class SshTunnelDialog extends JDialog {
             return "Host key verification is enabled but no host key has been accepted."
                     + " Fetch and accept the host key, or turn off verification.";
         }
-        for (var forward : forwardModel.getForwards()) {
+        var forwards = forwardModel.getForwards();
+        for (var forward : forwards) {
             if (forward.getBindHost().isBlank()) {
                 return "Every forward needs a bind host.";
             }
@@ -541,6 +544,24 @@ public class SshTunnelDialog extends JDialog {
             }
             if (forward.getDestinationPort() < 1 || forward.getDestinationPort() > 65535) {
                 return "Every forward needs a destination port between 1 and 65535.";
+            }
+        }
+
+        var locals = forwards.stream().filter(f -> f.getDirection() == ForwardDirection.LOCAL).toList();
+        for (int i = 0; i < locals.size(); i++) {
+            for (int j = i + 1; j < locals.size(); j++) {
+                if (locals.get(i).localBindCollidesWith(locals.get(j))) {
+                    return "Two local forwards bind the same address ("
+                            + locals.get(i).getBindHost() + ":" + locals.get(i).getBindPort() + ").";
+                }
+            }
+        }
+        for (var local : locals) {
+            for (var other : otherLocalForwards) {
+                if (local.localBindCollidesWith(other)) {
+                    return "Local forward " + local.getBindHost() + ":" + local.getBindPort()
+                            + " is already used by another tunnel on this host.";
+                }
             }
         }
         return null;

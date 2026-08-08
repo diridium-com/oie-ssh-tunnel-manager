@@ -211,7 +211,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         var selected = selectedTunnel();
         // Show the selection immediately from cached data; the selected tunnel's
         // event log fills in on the next refresh (auto or manual).
-        diagnosticsPane.setSelection(selected, selected != null ? latestStatuses.get(selected.getId()) : null);
+        diagnosticsPane.setSelectedTunnel(selected);
         if (isShowing()) {
             doRefresh();
         }
@@ -285,9 +285,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                         reselect(selected);
                     }
                     diagnosticsPane.setEventData(names, events);
-                    var current = selectedTunnel();
-                    diagnosticsPane.setSelection(current,
-                            current != null ? statusMap.get(current.getId()) : null);
+                    diagnosticsPane.setSelectedTunnel(selectedTunnel());
                     // If status specifically failed (which would leave everything
                     // showing "Disconnected"), show the real error once so it's
                     // diagnosable instead of hidden.
@@ -369,8 +367,25 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         return names;
     }
 
+    /** LOCAL forwards of all tunnels except excludeId, for bind-port collision checks. */
+    private List<PortForward> otherLocalForwards(String excludeId) {
+        var result = new java.util.ArrayList<PortForward>();
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            var tunnel = tableModel.getTunnelAt(i);
+            if (excludeId == null || !excludeId.equals(tunnel.getId())) {
+                for (var forward : tunnel.getForwards()) {
+                    if (forward.getDirection() == ForwardDirection.LOCAL) {
+                        result.add(forward);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
     private void newTunnel() {
-        var dialog = new SshTunnelDialog(PlatformUI.MIRTH_FRAME, getServlet(), new SshTunnel(), otherNames(null));
+        var dialog = new SshTunnelDialog(PlatformUI.MIRTH_FRAME, getServlet(), new SshTunnel(),
+                otherNames(null), otherLocalForwards(null));
         dialog.setVisible(true);
         if (dialog.isSaved()) {
             saveTunnel(dialog.getTunnel(), true);
@@ -383,7 +398,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
             return;
         }
         var dialog = new SshTunnelDialog(PlatformUI.MIRTH_FRAME, getServlet(), selected.copy(),
-                otherNames(selected.getId()));
+                otherNames(selected.getId()), otherLocalForwards(selected.getId()));
         dialog.setVisible(true);
         if (dialog.isSaved()) {
             saveTunnel(dialog.getTunnel(), false);
@@ -403,7 +418,8 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         copy.setPassword("");
         copy.setPrivateKeyPem("");
         copy.setPrivateKeyPassphrase("");
-        var dialog = new SshTunnelDialog(PlatformUI.MIRTH_FRAME, getServlet(), copy, otherNames(null));
+        var dialog = new SshTunnelDialog(PlatformUI.MIRTH_FRAME, getServlet(), copy,
+                otherNames(null), otherLocalForwards(null));
         dialog.setVisible(true);
         if (dialog.isSaved()) {
             saveTunnel(dialog.getTunnel(), true);

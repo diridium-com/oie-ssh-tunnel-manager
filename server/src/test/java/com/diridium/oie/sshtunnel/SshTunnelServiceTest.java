@@ -3,6 +3,7 @@
 
 package com.diridium.oie.sshtunnel;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -35,6 +36,13 @@ class SshTunnelServiceTest {
         lastManager = new TunnelManager(factory, System::currentTimeMillis);
         managers.add(lastManager);
         return new SshTunnelService(store, lastManager, factory);
+    }
+
+    /** A password tunnel whose single local forward binds a distinct port (avoids collision checks). */
+    private static SshTunnel tunnelOnPort(String name, int localPort) {
+        var tunnel = Fakes.passwordTunnel(null, name);
+        tunnel.getForwards().get(0).setBindPort(localPort);
+        return tunnel;
     }
 
     @Test
@@ -95,6 +103,43 @@ class SshTunnelServiceTest {
     }
 
     @Test
+    void rejectsLocalForwardPortCollisionAcrossTunnels() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+        service.create(Fakes.passwordTunnel(null, "vendor-a")); // local 127.0.0.1:6661
+        var b = Fakes.passwordTunnel(null, "vendor-b");           // also 127.0.0.1:6661
+        var ex = assertThrows(IllegalArgumentException.class, () -> service.create(b));
+        assertTrue(ex.getMessage().contains("vendor-a"), ex.getMessage());
+    }
+
+    @Test
+    void allowsDifferentLocalPorts() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+        service.create(Fakes.passwordTunnel(null, "vendor-a"));
+        var b = Fakes.passwordTunnel(null, "vendor-b");
+        b.getForwards().get(0).setBindPort(6662);
+        assertDoesNotThrow(() -> service.create(b));
+    }
+
+    @Test
+    void rejectsDuplicateLocalBindWithinOneTunnel() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+        var t = Fakes.passwordTunnel(null, "vendor");
+        t.getForwards().add(new PortForward(ForwardDirection.LOCAL, "127.0.0.1", 6661, "other", 9000));
+        var ex = assertThrows(IllegalArgumentException.class, () -> service.create(t));
+        assertTrue(ex.getMessage().contains("same address"), ex.getMessage());
+    }
+
+    @Test
+    void updatingATunnelDoesNotCollideWithItself() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+        var created = service.create(Fakes.passwordTunnel(null, "vendor-a"));
+        var edit = service.getTunnelsMasked().get(0);
+        edit.setName("vendor-a renamed");
+        // Same forward (127.0.0.1:6661) must not collide against its own stored copy.
+        assertDoesNotThrow(() -> service.update(created.getId(), edit));
+    }
+
+    @Test
     void duplicateNameRejected() {
         var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
         service.create(Fakes.passwordTunnel(null, "vendor-a"));
@@ -143,8 +188,8 @@ class SshTunnelServiceTest {
     void persistReloadRoundTrip() {
         var store = new Fakes.FakeConfigStore();
         var serviceA = newService(store, new Fakes.FakeSshConnectionFactory());
-        serviceA.create(Fakes.passwordTunnel(null, "vendor-a"));
-        serviceA.create(Fakes.passwordTunnel(null, "vendor-b"));
+        serviceA.create(tunnelOnPort("vendor-a", 6661));
+        serviceA.create(tunnelOnPort("vendor-b", 6662));
 
         // A brand-new service over the same store must reload both tunnels,
         // decrypting their secrets back to plaintext internally.
@@ -156,7 +201,7 @@ class SshTunnelServiceTest {
         assertTrue(reloaded.stream().anyMatch(t -> t.getName().equals("vendor-a")));
         assertTrue(reloaded.stream().anyMatch(t -> t.getName().equals("vendor-b")));
         // Re-persisting must not double-encrypt.
-        serviceB.create(Fakes.passwordTunnel(null, "vendor-c"));
+        serviceB.create(tunnelOnPort("vendor-c", 6663));
         assertFalse(store.getProperty("tunnels").contains("ENC[ENC["));
     }
 
