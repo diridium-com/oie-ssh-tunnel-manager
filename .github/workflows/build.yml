@@ -76,6 +76,20 @@ jobs:
             oie/server-lib/mirth-client-core.jar \
             oie/server-lib/donkey/donkey-server.jar \
             oie/client-lib/mirth-client.jar
+          # Release jars are jarsigner-signed by the OIE project. We use them
+          # only as compile/test dependencies, never redistribute them, and the
+          # package com.mirth.connect.plugins spans mirth-client and
+          # mirth-client-core; loading a class from each in one JVM throws a
+          # signer-mismatch SecurityException (ClassLoader.checkCerts). Strip the
+          # signatures, which are meaningless for a dependency jar.
+          for jar in \
+            oie/server-lib/mirth-server.jar \
+            oie/server-lib/mirth-crypto.jar \
+            oie/server-lib/mirth-client-core.jar \
+            oie/server-lib/donkey/donkey-server.jar \
+            oie/client-lib/mirth-client.jar; do
+            zip -q -d "$jar" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' >/dev/null 2>&1 || true
+          done
           for pair in \
             "mirth-server:oie/server-lib/mirth-server.jar" \
             "mirth-crypto:oie/server-lib/mirth-crypto.jar" \

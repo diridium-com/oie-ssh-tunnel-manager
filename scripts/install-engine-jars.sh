@@ -40,10 +40,21 @@ for entry in "${JARS[@]}"; do
     fi
 done
 
+# Work on copies so a signed engine build is never mutated in place.
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "${WORK_DIR}"' EXIT
+
 for entry in "${JARS[@]}"; do
     artifact="${entry%%:*}"
-    jar_path="${ENGINE_DIR}/${entry#*:}"
-    echo "installing ${artifact}-${VERSION} from ${jar_path}"
+    src="${ENGINE_DIR}/${entry#*:}"
+    jar_path="${WORK_DIR}/${artifact}.jar"
+    cp "${src}" "${jar_path}"
+    # If the engine was built with signing, strip signatures: the
+    # com.mirth.connect.plugins package spans mirth-client and
+    # mirth-client-core, and loading a class from each signed jar in one JVM
+    # throws a signer-mismatch SecurityException. Harmless no-op when unsigned.
+    zip -q -d "${jar_path}" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' >/dev/null 2>&1 || true
+    echo "installing ${artifact}-${VERSION} from ${src}"
     mvn -q install:install-file \
         -Dfile="${jar_path}" \
         -DgroupId=com.mirth.connect \
