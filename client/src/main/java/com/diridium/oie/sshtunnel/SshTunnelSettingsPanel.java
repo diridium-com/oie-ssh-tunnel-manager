@@ -50,6 +50,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
     private TunnelTableModel tableModel;
     private TunnelDiagnosticsPane diagnosticsPane;
     private Timer pollTimer;
+    private Timer burstTimer;
 
     private JButton btnEdit;
     private JButton btnDuplicate;
@@ -166,6 +167,33 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         if (pollTimer != null) {
             pollTimer.stop();
         }
+        if (burstTimer != null) {
+            burstTimer.stop();
+        }
+    }
+
+    /**
+     * After a state-changing action (start/stop/enable/disable/save), the server
+     * connects or disconnects asynchronously, so the result isn't ready on the
+     * immediate refresh. Refresh a few more times over the next several seconds so
+     * a Connecting -> Connected transition shows promptly instead of waiting for
+     * the next full poll interval. Not an always-on fast poll; it stops on its own.
+     */
+    private void burstRefresh() {
+        if (burstTimer != null) {
+            burstTimer.stop();
+        }
+        var remaining = new int[] {8}; // ~16s of coverage, past the 15s connect timeout
+        burstTimer = new Timer(2000, null);
+        burstTimer.setInitialDelay(1000);
+        burstTimer.addActionListener(e -> {
+            if (!isShowing() || --remaining[0] < 0) {
+                burstTimer.stop();
+                return;
+            }
+            doRefresh();
+        });
+        burstTimer.start();
     }
 
     /** The Administrator's own Dashboard refresh interval; no plugin-specific rate. */
@@ -399,6 +427,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                 try {
                     get();
                     doRefresh();
+                    burstRefresh();
                 } catch (Exception e) {
                     log.error("Failed to save tunnel", e);
                     PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
@@ -459,6 +488,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                 try {
                     get();
                     doRefresh();
+                    burstRefresh();
                 } catch (Exception e) {
                     log.error("Failed to control tunnel", e);
                     PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
