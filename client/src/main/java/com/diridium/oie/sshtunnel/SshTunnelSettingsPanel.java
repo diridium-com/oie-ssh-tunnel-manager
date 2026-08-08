@@ -62,6 +62,8 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
     private Map<String, SshTunnelStatus> latestStatuses = Map.of();
     /** EDT-only: bumped per refresh so a slow worker's result can't clobber a newer one. */
     private long refreshSeq;
+    /** Show a status-fetch failure once, not on every poll. */
+    private boolean statusErrorShown;
 
     public SshTunnelSettingsPanel(String tabName) {
         super(tabName);
@@ -202,6 +204,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
             private Map<String, SshTunnelStatus> statusMap;
             private Map<String, String> names;
             private Map<String, List<TunnelEvent>> events;
+            private Exception statusError;
 
             @Override
             protected Void doInBackground() throws Exception {
@@ -213,7 +216,9 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                     }
                 } catch (Exception e) {
                     // A silent failure here makes every tunnel look "Disconnected"
-                    // (the no-status fallback), so surface it.
+                    // (the no-status fallback). Capture it so done() can surface
+                    // the real exception instead of hiding it behind a grey status.
+                    statusError = e;
                     log.warn("Could not fetch tunnel statuses; tunnels will show as disconnected", e);
                 }
                 names = new LinkedHashMap<>();
@@ -255,6 +260,14 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                     var current = selectedTunnel();
                     diagnosticsPane.setSelection(current,
                             current != null ? statusMap.get(current.getId()) : null);
+                    // If status specifically failed (which would leave everything
+                    // showing "Disconnected"), show the real error once so it's
+                    // diagnosable instead of hidden.
+                    if (statusError != null && !statusErrorShown) {
+                        statusErrorShown = true;
+                        PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, statusError,
+                                "Could not load tunnel status (tunnels will show as Disconnected until this is fixed):");
+                    }
                 } catch (Exception e) {
                     log.error("Failed to load tunnels", e);
                     latestStatuses = Map.of();
