@@ -258,6 +258,37 @@ class TunnelManagerTest {
     }
 
     @Test
+    void statusesAndEventsDeserializeUnderClientAllowlist() throws Exception {
+        // Reproduces the Administrator's wire path: a deny-by-default XStream that
+        // allows only ArrayList + this plugin's types. Immutable collections
+        // (List.of/List.copyOf) serialize as java.util.CollSer, which is NOT
+        // allow-listed, so the client throws ForbiddenClassException and every
+        // tunnel falls back to "Disconnected". This is exactly that bug's guard.
+        newManager();
+        manager.applyTunnels(List.of(Fakes.passwordTunnel("t1", "vendor")));
+        manager.drainTasks();
+
+        assertRoundTrips(manager.getStatuses());       // populated -> was List.copyOf
+        assertRoundTrips(manager.getEvents("t1"));      // populated
+        assertRoundTrips(manager.getEvents("no-such")); // empty -> was List.of()
+    }
+
+    private static void assertRoundTrips(Object value) {
+        // Mirror the Administrator's XStream: deny-by-default, but allow the
+        // Collection hierarchy and interfaces (ArrayList, List, ...). CollSer, the
+        // immutable-collection serialization proxy, is none of those, so it fails.
+        var xs = new com.thoughtworks.xstream.XStream(new com.thoughtworks.xstream.io.xml.DomDriver());
+        xs.addPermission(com.thoughtworks.xstream.security.NoTypePermission.NONE);
+        xs.addPermission(com.thoughtworks.xstream.security.NullPermission.NULL);
+        xs.addPermission(com.thoughtworks.xstream.security.PrimitiveTypePermission.PRIMITIVES);
+        xs.allowTypeHierarchy(String.class);
+        xs.allowTypeHierarchy(java.util.Collection.class);
+        xs.allowTypesByWildcard(new String[] {"com.diridium.oie.sshtunnel.**"});
+        var xml = xs.toXML(value);
+        assertTrue(xs.fromXML(xml) != null, "should deserialize without ForbiddenClassException");
+    }
+
+    @Test
     void backoffDelayGrowsAndCaps() {
         assertEquals(5000L, TunnelManager.backoffDelay(1));
         assertEquals(10000L, TunnelManager.backoffDelay(2));

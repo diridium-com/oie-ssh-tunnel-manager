@@ -60,7 +60,11 @@ public class TunnelManager {
      */
     private final Map<String, Deque<TunnelEvent>> eventLog = new ConcurrentHashMap<>();
 
-    private volatile List<SshTunnelStatus> statusSnapshot = List.of();
+    // Must be a plain ArrayList, never List.of()/List.copyOf(): those serialize
+    // over the wire as java.util.CollSer, which is not in XStream's client
+    // allowlist, so the client throws ForbiddenClassException and every tunnel
+    // falls back to showing "Disconnected".
+    private volatile List<SshTunnelStatus> statusSnapshot = new ArrayList<>();
 
     /** Set once shutdown begins; stops any later reconcile from reopening tunnels. */
     private volatile boolean closed;
@@ -137,7 +141,7 @@ public class TunnelManager {
     /** Recent connection-history events for a tunnel, oldest first. */
     public List<TunnelEvent> getEvents(String id) {
         var deque = eventLog.get(id);
-        return deque == null ? List.of() : new ArrayList<>(deque);
+        return deque == null ? new ArrayList<>() : new ArrayList<>(deque);
     }
 
     private void recordEvent(String id, TunnelEvent.Level level, String message) {
@@ -330,7 +334,8 @@ public class TunnelManager {
             status.setNextRetryAt(runtime.nextRetryAt);
             statuses.add(status);
         }
-        statusSnapshot = List.copyOf(statuses);
+        // Plain ArrayList only (see statusSnapshot field note) — not List.copyOf.
+        statusSnapshot = statuses;
     }
 
     /** Test hook: runs a reconcile pass on the executor thread and waits for it. */
