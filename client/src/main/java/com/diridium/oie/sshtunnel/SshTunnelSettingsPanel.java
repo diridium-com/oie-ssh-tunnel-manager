@@ -4,21 +4,29 @@
 package com.diridium.oie.sshtunnel;
 
 import java.awt.BorderLayout;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.prefs.Preferences;
 
 import javax.swing.JButton;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 
 import com.mirth.connect.client.ui.AbstractSettingsPanel;
+import com.mirth.connect.client.ui.Mirth;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.client.ui.components.MirthTable;
 
@@ -28,23 +36,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Settings panel listing SSH tunnels with live status, appearing as a tab in
- * the OIE Administrator Settings view.
+ * Settings panel: a live split view of the tunnel list (top) and a diagnostics
+ * pane (bottom). Polls at the Administrator's Dashboard interval while showing,
+ * stepping up to a few seconds while a tunnel is selected so the operator can
+ * watch it in near-real-time.
  */
 public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
 
     private static final Logger log = LoggerFactory.getLogger(SshTunnelSettingsPanel.class);
+    private static final int FAST_POLL_MS = 3000;
 
     private SshTunnelServletInterface servlet;
     private MirthTable table;
     private TunnelTableModel tableModel;
+    private TunnelDiagnosticsPane diagnosticsPane;
+    private Timer pollTimer;
+
     private JButton btnEdit;
     private JButton btnDuplicate;
     private JButton btnDelete;
     private JButton btnStart;
     private JButton btnStop;
-    private JButton btnDetails;
+    private JButton btnTest;
+
     private Map<String, SshTunnelStatus> latestStatuses = Map.of();
+    /** EDT-only: bumped per refresh so a slow worker's result can't clobber a newer one. */
+    private long refreshSeq;
 
     public SshTunnelSettingsPanel(String tabName) {
         super(tabName);
@@ -58,9 +75,12 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         table = new MirthTable();
         table.setModel(tableModel);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        var statusRenderer = new TunnelStatusCellRenderer();
+        table.getColumnModel().getColumn(TunnelTableModel.COL_HOST_KEY).setCellRenderer(statusRenderer);
+        table.getColumnModel().getColumn(TunnelTableModel.COL_STATUS).setCellRenderer(statusRenderer);
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
-                updateButtonStates();
+                onSelectionChanged();
             }
         });
         table.addMouseListener(new MouseAdapter() {
@@ -74,30 +94,12 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
 
         var btnNew = new JButton("New");
         btnNew.addActionListener(e -> newTunnel());
-
-        btnEdit = new JButton("Edit");
-        btnEdit.setEnabled(false);
-        btnEdit.addActionListener(e -> editTunnel());
-
-        btnDuplicate = new JButton("Duplicate");
-        btnDuplicate.setEnabled(false);
-        btnDuplicate.addActionListener(e -> duplicateTunnel());
-
-        btnDelete = new JButton("Delete");
-        btnDelete.setEnabled(false);
-        btnDelete.addActionListener(e -> deleteTunnel());
-
-        btnStart = new JButton("Start");
-        btnStart.setEnabled(false);
-        btnStart.addActionListener(e -> startTunnel());
-
-        btnStop = new JButton("Stop");
-        btnStop.setEnabled(false);
-        btnStop.addActionListener(e -> stopTunnel());
-
-        btnDetails = new JButton("Details");
-        btnDetails.setEnabled(false);
-        btnDetails.addActionListener(e -> showDetails());
+        btnEdit = disabled(new JButton("Edit"), e -> editTunnel());
+        btnDuplicate = disabled(new JButton("Duplicate"), e -> duplicateTunnel());
+        btnDelete = disabled(new JButton("Delete"), e -> deleteTunnel());
+        btnStart = disabled(new JButton("Start"), e -> runControl(true));
+        btnStop = disabled(new JButton("Stop"), e -> runControl(false));
+        btnTest = disabled(new JButton("Test"), e -> testSelected());
 
         var buttonPanel = new JPanel(new MigLayout("insets 0 12 0 12", "[][][][]push[][][]", ""));
         buttonPanel.add(btnNew);
@@ -106,20 +108,91 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         buttonPanel.add(btnDelete);
         buttonPanel.add(btnStart);
         buttonPanel.add(btnStop);
-        buttonPanel.add(btnDetails);
+        buttonPanel.add(btnTest);
 
-        var topPanel = new JPanel(new MigLayout("insets 0 12 4 12", "[grow]", "[]"));
-        topPanel.add(buttonPanel, "growx");
+        var topPanel = new JPanel(new BorderLayout());
+        topPanel.add(buttonPanel, BorderLayout.NORTH);
+        topPanel.add(new JScrollPane(table), BorderLayout.CENTER);
 
-        add(topPanel, BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        diagnosticsPane = new TunnelDiagnosticsPane();
+
+        var split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topPanel, diagnosticsPane);
+        split.setResizeWeight(0.6);
+        split.setOneTouchExpandable(true);
+        add(split, BorderLayout.CENTER);
+
+        // Poll only while the tab is actually on screen (mirrors the engine's StatusUpdater).
+        addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) {
+                if (isShowing()) {
+                    startPolling();
+                } else {
+                    stopPolling();
+                }
+            }
+        });
+    }
+
+    private JButton disabled(JButton button, java.awt.event.ActionListener action) {
+        button.setEnabled(false);
+        button.addActionListener(action);
+        return button;
+    }
+
+    private void startPolling() {
+        if (pollTimer == null) {
+            pollTimer = new Timer(currentIntervalMs(), e -> doRefresh());
+            pollTimer.setRepeats(true);
+        }
+        pollTimer.setInitialDelay(0);
+        pollTimer.setDelay(currentIntervalMs());
+        // The initial-delay-0 timer fires the first fetch itself; calling
+        // doRefresh() here too would double it on every show.
+        pollTimer.restart();
+    }
+
+    private void stopPolling() {
+        if (pollTimer != null) {
+            pollTimer.stop();
+        }
+    }
+
+    /** Fast while a tunnel is selected; otherwise the Administrator's Dashboard interval. */
+    private int currentIntervalMs() {
+        if (table != null && table.getSelectedRow() >= 0) {
+            return FAST_POLL_MS;
+        }
+        try {
+            int seconds = Preferences.userNodeForPackage(Mirth.class).getInt("intervalTime", 10);
+            return Math.max(2, seconds) * 1000;
+        } catch (Exception e) {
+            return 10000;
+        }
+    }
+
+    private void onSelectionChanged() {
+        updateButtonStates();
+        if (pollTimer != null) {
+            pollTimer.setDelay(currentIntervalMs());
+        }
+        var selected = selectedTunnel();
+        diagnosticsPane.setSelection(selected, selected != null ? latestStatuses.get(selected.getId()) : null);
+        // Pull fresh data promptly for the new selection.
+        if (isShowing()) {
+            doRefresh();
+        }
     }
 
     @Override
     public void doRefresh() {
+        var selected = selectedTunnel();
+        boolean allEvents = diagnosticsPane.isShowingAllTunnels();
+        final long seq = ++refreshSeq;
         new SwingWorker<Void, Void>() {
             private List<SshTunnel> tunnels;
             private Map<String, SshTunnelStatus> statusMap;
+            private Map<String, String> names;
+            private Map<String, List<TunnelEvent>> events;
 
             @Override
             protected Void doInBackground() throws Exception {
@@ -132,15 +205,42 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                 } catch (Exception e) {
                     log.debug("Could not fetch tunnel statuses", e);
                 }
+                names = new LinkedHashMap<>();
+                for (var tunnel : tunnels) {
+                    names.put(tunnel.getId(), tunnel.getName());
+                }
+                events = new HashMap<>();
+                try {
+                    if (allEvents) {
+                        for (var tunnel : tunnels) {
+                            events.put(tunnel.getId(), getServlet().getTunnelEvents(tunnel.getId()));
+                        }
+                    } else if (selected != null) {
+                        events.put(selected.getId(), getServlet().getTunnelEvents(selected.getId()));
+                    }
+                } catch (Exception e) {
+                    log.debug("Could not fetch tunnel events", e);
+                }
                 return null;
             }
 
             @Override
             protected void done() {
+                // A newer refresh has since started; drop this stale result so it
+                // can't overwrite fresher data (SwingWorker.done order is not
+                // start order).
+                if (seq != refreshSeq) {
+                    return;
+                }
                 try {
                     get();
                     latestStatuses = statusMap;
                     tableModel.setData(tunnels, statusMap);
+                    reselect(selected);
+                    diagnosticsPane.setEventData(names, events);
+                    var current = selectedTunnel();
+                    diagnosticsPane.setSelection(current,
+                            current != null ? statusMap.get(current.getId()) : null);
                 } catch (Exception e) {
                     log.error("Failed to load tunnels", e);
                     latestStatuses = Map.of();
@@ -157,6 +257,20 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         return true;
     }
 
+    /** Keeps the same tunnel selected across a data refresh. */
+    private void reselect(SshTunnel previous) {
+        if (previous == null) {
+            return;
+        }
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            if (tableModel.getTunnelAt(i).getId().equals(previous.getId())) {
+                int view = table.convertRowIndexToView(i);
+                table.getSelectionModel().setSelectionInterval(view, view);
+                return;
+            }
+        }
+    }
+
     private void updateButtonStates() {
         boolean selected = table.getSelectedRowCount() == 1;
         btnEdit.setEnabled(selected);
@@ -164,16 +278,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         btnDelete.setEnabled(selected);
         btnStart.setEnabled(selected);
         btnStop.setEnabled(selected);
-        btnDetails.setEnabled(selected);
-    }
-
-    private void showDetails() {
-        var selected = selectedTunnel();
-        if (selected == null) {
-            return;
-        }
-        var status = latestStatuses.get(selected.getId());
-        new TunnelDetailDialog(PlatformUI.MIRTH_FRAME, getServlet(), selected.copy(), status).setVisible(true);
+        btnTest.setEnabled(selected);
     }
 
     private SshTunnel selectedTunnel() {
@@ -182,6 +287,17 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
             return null;
         }
         return tableModel.getTunnelAt(table.convertRowIndexToModel(viewRow));
+    }
+
+    private Set<String> otherNames(String excludeId) {
+        var names = new HashSet<String>();
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            var tunnel = tableModel.getTunnelAt(i);
+            if (excludeId == null || !excludeId.equals(tunnel.getId())) {
+                names.add(tunnel.getName().toLowerCase());
+            }
+        }
+        return names;
     }
 
     private void newTunnel() {
@@ -214,8 +330,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         copy.setId(null);
         copy.setName(selected.getName() + " (copy)");
         // The source came from getTunnels(), so its secrets are the mask string.
-        // Sending the mask on create resolves to empty; blank them instead so
-        // the admin re-enters real secrets for the new tunnel.
+        // Blank them so the admin re-enters real secrets for the new tunnel.
         copy.setPassword("");
         copy.setPrivateKeyPem("");
         copy.setPrivateKeyPassphrase("");
@@ -224,18 +339,6 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         if (dialog.isSaved()) {
             saveTunnel(dialog.getTunnel(), true);
         }
-    }
-
-    /** Lowercased names of all tunnels except the one with excludeId, for uniqueness checks. */
-    private java.util.Set<String> otherNames(String excludeId) {
-        var names = new java.util.HashSet<String>();
-        for (int i = 0; i < tableModel.getRowCount(); i++) {
-            var tunnel = tableModel.getTunnelAt(i);
-            if (excludeId == null || !excludeId.equals(tunnel.getId())) {
-                names.add(tunnel.getName().toLowerCase());
-            }
-        }
-        return names;
     }
 
     private void saveTunnel(SshTunnel tunnel, boolean isNew) {
@@ -294,14 +397,6 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         }.execute();
     }
 
-    private void startTunnel() {
-        runControl(true);
-    }
-
-    private void stopTunnel() {
-        runControl(false);
-    }
-
     private void runControl(boolean start) {
         var selected = selectedTunnel();
         if (selected == null) {
@@ -326,6 +421,33 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                 } catch (Exception e) {
                     log.error("Failed to control tunnel", e);
                     PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
+                }
+            }
+        }.execute();
+    }
+
+    /** Runs a diagnostic against the selected saved tunnel and shows it in the pane. */
+    private void testSelected() {
+        var selected = selectedTunnel();
+        if (selected == null) {
+            return;
+        }
+        btnTest.setEnabled(false);
+        new SwingWorker<DiagnosticResult, Void>() {
+            @Override
+            protected DiagnosticResult doInBackground() throws Exception {
+                return getServlet().testConnection(selected);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    diagnosticsPane.showTestResult(get());
+                } catch (Exception e) {
+                    log.error("Test connection failed", e);
+                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
+                } finally {
+                    btnTest.setEnabled(table.getSelectedRowCount() == 1);
                 }
             }
         }.execute();

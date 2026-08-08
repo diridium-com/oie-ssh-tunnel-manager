@@ -59,17 +59,18 @@ Each tunnel has:
 - **Connection** — name, SSH host/port, username, authentication, host-key verification, and keep-alive settings.
 - **Forwards** — any number of local or reverse forwards, each with a bind host/port and a destination host/port.
 
-Enabled tunnels connect on save and stay connected; the tab shows live status.
+The settings tab is a live split view. The top is the tunnel table with a color-coded status column that updates on its own; the bottom is a diagnostics pane that follows the selected tunnel. It polls at the Administrator's Dashboard refresh interval while the tab is open, stepping up to a few seconds while a tunnel is selected so you can watch it in near-real-time.
 
-**Diagnostics.** Two tools help when something is wrong:
+**Diagnostics.**
 
-- **Test Connection** (in the edit dialog) runs a staged diagnostic and shows a per-step table: DNS resolution, TCP reach to the SSH port, host-key match against the accepted key, authentication, and, for each forward, whether the destination is actually reachable through the tunnel. A local forward's destination is probed end-to-end via a direct channel, so the test works even while the tunnel is connected without disturbing it.
-- **Details** (select a tunnel, click Details) shows live status — state, uptime, failed attempts, next-retry countdown, last error — the tunnel's forwards, and a rolling event log of connects, drops, and failures. Refresh re-pulls both from the server.
+- **Test Connection** runs a staged diagnostic and shows a per-step table: configuration checks, DNS, TCP reach to the SSH port, host-key match against the accepted key, authentication, and, per forward, whether the destination is actually reachable through the tunnel. A local forward's destination is probed end-to-end via a direct channel, so the test works even while the tunnel is connected. Failed and warning steps carry an actionable hint (for example, the exact `authorized_keys` line to add when a key is rejected), with a Copy button. Run it from the edit dialog while configuring, or from the tab's Test button for a saved tunnel (results appear in the pane).
+- The **diagnostics pane** shows the selected tunnel's live status (state, uptime, failed attempts, next-retry countdown, last error), and a rolling **event log** of connects, drops, and failures with a **This tunnel / All tunnels** filter.
+- **Verify Key & Show Public Key** (in the edit dialog, key auth) decrypts the private key with the passphrase — verifying it in one step — and shows the public key to add to the server's `authorized_keys`, with a Copy button.
 
 ## Security notes
 
 - Passwords, pasted private keys, and key passphrases are **encrypted at rest** with the engine's configured encryptor. The Administrator never receives stored secrets back — it sees a mask, and sending the mask back on save keeps the stored value.
-- Host-key verification is **on by default**. You must fetch and accept a server's host key before a verifying tunnel will connect. Verification can be disabled per tunnel, with a warning, for lab use.
+- Host-key verification is **on by default** and should stay on. Without it the tunnel is encrypted but not authenticated, so a man-in-the-middle cannot be detected — for a PHI transport that is a transmission-security failure, not a nicety. You fetch and accept a server's host key with one click before a verifying tunnel will connect. It can be disabled per tunnel, behind a firm warning and a persistent "Unverified" marker in the tunnel list, for throwaway lab testing only.
 - The browser/Administrator is not a store for secrets; see [`docs/design-notes.md`](docs/design-notes.md) for the full model.
 
 ## License

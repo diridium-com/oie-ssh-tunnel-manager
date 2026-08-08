@@ -11,6 +11,12 @@ import com.mirth.connect.server.controllers.ConfigurationController;
  */
 public class EngineConfigStore implements ConfigStore {
 
+    // MUST equal the plugin.xml <name>. On uninstall the engine deletes a
+    // plugin's CONFIGURATION rows WHERE CATEGORY = <name>
+    // (DefaultExtensionController.removePropertiesForUninstalledExtensions ->
+    // ConfigurationController.removePropertiesForGroup). If this group ever
+    // diverged from the plugin name, uninstall would silently orphan every
+    // stored tunnel, secrets included. PluginNameMatchesConfigGroupTest guards it.
     private static final String GROUP = SshTunnelServletInterface.PLUGIN_NAME;
 
     @Override

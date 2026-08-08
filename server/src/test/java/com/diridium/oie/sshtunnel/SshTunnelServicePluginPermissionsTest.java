@@ -48,11 +48,11 @@ class SshTunnelServicePluginPermissionsTest {
         var manageOps = List.of(manage.getOperationNames());
         assertTrue(manageOps.containsAll(List.of(
                 "createTunnel", "updateTunnel", "deleteTunnel",
-                "startTunnel", "stopTunnel", "testConnection", "fetchHostKey")),
+                "startTunnel", "stopTunnel", "testConnection", "fetchHostKey", "derivePublicKey")),
                 "manage ops: " + manageOps);
 
         // Every annotated operation is registered under exactly one permission.
-        assertEquals(10, viewOps.size() + manageOps.size());
+        assertEquals(11, viewOps.size() + manageOps.size());
     }
 
     @Test

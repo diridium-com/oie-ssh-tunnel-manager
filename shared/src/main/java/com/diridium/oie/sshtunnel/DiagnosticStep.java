@@ -12,6 +12,8 @@ public class DiagnosticStep implements Serializable {
     private StepStatus status = StepStatus.SKIP;
     private String detail = "";
     private long durationMs;
+    /** Optional actionable guidance shown when this step warns or fails (e.g. an authorized_keys line). */
+    private String hint = "";
 
     public DiagnosticStep() {
     }
@@ -21,6 +23,11 @@ public class DiagnosticStep implements Serializable {
         this.status = status;
         this.detail = detail;
         this.durationMs = durationMs;
+    }
+
+    public DiagnosticStep(String name, StepStatus status, String detail, long durationMs, String hint) {
+        this(name, status, detail, durationMs);
+        this.hint = hint != null ? hint : "";
     }
 
     public String getName() {
@@ -53,6 +60,14 @@ public class DiagnosticStep implements Serializable {
 
     public void setDurationMs(long durationMs) {
         this.durationMs = durationMs;
+    }
+
+    public String getHint() {
+        return hint;
+    }
+
+    public void setHint(String hint) {
+        this.hint = hint != null ? hint : "";
     }
 
     @Override

@@ -246,6 +246,36 @@ class SshTunnelServiceTest {
     }
 
     @Test
+    void derivePublicKeyResolvesMaskAndReturnsKey() throws Exception {
+        var factory = new Fakes.FakeSshConnectionFactory();
+        factory.derivedPublicKey = "ssh-ed25519 AAAATEST oie-tunnel";
+        var service = newService(new Fakes.FakeConfigStore(), factory);
+
+        var keyTunnel = Fakes.passwordTunnel(null, "vendor");
+        keyTunnel.setAuthMethod(AuthMethod.PRIVATE_KEY);
+        keyTunnel.setKeySource(KeySource.INLINE);
+        keyTunnel.setPrivateKeyPem("-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----");
+        var created = service.create(keyTunnel);
+
+        // Client re-derives from an edited tunnel still carrying the masked key.
+        var edit = service.getTunnelsMasked().get(0);
+        edit.setId(created.getId());
+        assertEquals("ssh-ed25519 AAAATEST oie-tunnel", service.derivePublicKey(edit));
+    }
+
+    @Test
+    void derivePublicKeyPropagatesDecryptFailure() {
+        var factory = new Fakes.FakeSshConnectionFactory();
+        factory.failDerive = true;
+        var service = newService(new Fakes.FakeConfigStore(), factory);
+        var keyTunnel = Fakes.passwordTunnel(null, "vendor");
+        keyTunnel.setAuthMethod(AuthMethod.PRIVATE_KEY);
+        keyTunnel.setKeySource(KeySource.INLINE);
+        keyTunnel.setPrivateKeyPem("-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----");
+        assertThrows(SshTunnelException.class, () -> service.derivePublicKey(keyTunnel));
+    }
+
+    @Test
     void fetchHostKeyValidatesInputs() {
         var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
         assertThrows(IllegalArgumentException.class, () -> service.fetchHostKey("", 22));

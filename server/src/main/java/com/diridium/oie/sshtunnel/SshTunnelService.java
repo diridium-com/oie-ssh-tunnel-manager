@@ -172,6 +172,16 @@ public class SshTunnelService {
         return manager.getEvents(id);
     }
 
+    /** Derives the public key for the given (possibly unsaved) tunnel's private key. */
+    public String derivePublicKey(SshTunnel incoming) throws SshTunnelException {
+        SshTunnel stored;
+        synchronized (this) {
+            stored = incoming.getId() != null ? findByIdOrNull(incoming.getId()) : null;
+        }
+        var tunnel = SecretFields.resolveMasks(incoming, stored);
+        return factory.derivePublicKey(tunnel);
+    }
+
     public HostKeyInfo fetchHostKey(String host, int port) throws SshTunnelException {
         if (host == null || host.isBlank()) {
             throw new IllegalArgumentException("Host is required");

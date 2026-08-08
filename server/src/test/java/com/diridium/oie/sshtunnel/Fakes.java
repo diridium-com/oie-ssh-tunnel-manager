@@ -88,6 +88,17 @@ final class Fakes {
             }
             return hostKey;
         }
+
+        volatile boolean failDerive;
+        volatile String derivedPublicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 oie-tunnel";
+
+        @Override
+        public String derivePublicKey(SshTunnel tunnel) throws SshTunnelException {
+            if (failDerive) {
+                throw new SshTunnelException("Could not decrypt the private key. Check the passphrase.");
+            }
+            return derivedPublicKey;
+        }
     }
 
     static final class FakeConfigStore implements ConfigStore {

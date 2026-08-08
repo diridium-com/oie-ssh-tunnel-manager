@@ -167,6 +167,18 @@ public class SshTunnelServlet extends MirthServlet implements SshTunnelServletIn
     }
 
     @Override
+    public String derivePublicKey(SshTunnel tunnel) throws ClientException {
+        try {
+            return SshTunnelService.getInstance().derivePublicKey(tunnel);
+        } catch (SshTunnelException e) {
+            throw new MirthApiException(e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to derive public key", e);
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
     public HostKeyInfo fetchHostKey(String host, int port) throws ClientException {
         try {
             var info = SshTunnelService.getInstance().fetchHostKey(host, port);

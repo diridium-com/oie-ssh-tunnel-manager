@@ -47,6 +47,12 @@ public class DiagnosticResult implements Serializable {
         return status;
     }
 
+    /** Adds a step carrying an actionable hint. */
+    public StepStatus add(String name, StepStatus status, String detail, long durationMs, String hint) {
+        steps.add(new DiagnosticStep(name, status, detail, durationMs, hint));
+        return status;
+    }
+
     /** Recomputes success (no FAIL step) and a one-line summary. */
     public void finish() {
         long fails = steps.stream().filter(s -> s.getStatus() == StepStatus.FAIL).count();

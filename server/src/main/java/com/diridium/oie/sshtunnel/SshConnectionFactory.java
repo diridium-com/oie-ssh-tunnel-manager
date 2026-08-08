@@ -27,4 +27,11 @@ public interface SshConnectionFactory {
 
     /** Fetches the server's host key without authenticating, for display and acceptance. */
     HostKeyInfo fetchHostKey(String host, int port) throws SshTunnelException;
+
+    /**
+     * Loads the tunnel's private key (decrypting with the passphrase) and returns
+     * its public key in OpenSSH authorized_keys format. Throws if the key cannot
+     * be read or the passphrase is wrong, which makes this the passphrase check too.
+     */
+    String derivePublicKey(SshTunnel tunnel) throws SshTunnelException;
 }

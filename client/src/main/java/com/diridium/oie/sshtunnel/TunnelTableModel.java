@@ -12,7 +12,10 @@ import javax.swing.table.AbstractTableModel;
 /** Table model for the tunnel list, joining each tunnel with its runtime status. */
 public class TunnelTableModel extends AbstractTableModel {
 
-    private static final String[] COLUMNS = {"Name", "Endpoint", "Forwards", "Enabled", "Status"};
+    static final int COL_STATUS = 5;
+    static final int COL_HOST_KEY = 4;
+
+    private static final String[] COLUMNS = {"Name", "Endpoint", "Forwards", "Enabled", "Host Key", "Status"};
 
     private List<SshTunnel> tunnels = new ArrayList<>();
     private Map<String, SshTunnelStatus> statuses = Map.of();
@@ -25,6 +28,20 @@ public class TunnelTableModel extends AbstractTableModel {
 
     public SshTunnel getTunnelAt(int row) {
         return tunnels.get(row);
+    }
+
+    /** Runtime state for the row, for the status cell renderer. */
+    public TunnelState getStateAt(int row) {
+        var tunnel = tunnels.get(row);
+        var status = statuses.get(tunnel.getId());
+        if (status != null) {
+            return status.getState();
+        }
+        return tunnel.isEnabled() ? TunnelState.DISCONNECTED : TunnelState.DISABLED;
+    }
+
+    public boolean isVerifiedAt(int row) {
+        return tunnels.get(row).isVerifyHostKey();
     }
 
     @Override
@@ -50,7 +67,8 @@ public class TunnelTableModel extends AbstractTableModel {
             case 1 -> tunnel.getEndpointDescription();
             case 2 -> tunnel.getForwards().size();
             case 3 -> tunnel.isEnabled() ? "Yes" : "No";
-            case 4 -> statusText(tunnel);
+            case 4 -> tunnel.isVerifyHostKey() ? "Pinned" : "Unverified";
+            case COL_STATUS -> statusText(tunnel);
             default -> "";
         };
     }

@@ -69,6 +69,7 @@ public class SshTunnelDialog extends JDialog {
     private JPanel keyPathPanel;
     private JPanel keyPemPanel;
 
+    private JButton showPublicKeyButton;
     private JCheckBox verifyHostKeyCheck;
     private JLabel hostKeyLabel;
     private JButton fetchHostKeyButton;
@@ -90,7 +91,8 @@ public class SshTunnelDialog extends JDialog {
         loadFromTunnel();
         updateAuthVisibility();
         updateHostKeyState();
-        setSize(new Dimension(680, 620));
+        setMinimumSize(new Dimension(580, 0));
+        pack();
         setLocationRelativeTo(parent);
     }
 
@@ -185,12 +187,16 @@ public class SshTunnelDialog extends JDialog {
         keyPanel.add(new JLabel("Private Key:"));
         keyPanel.add(keyPemPanel, "grow");
         keyPanel.add(new JLabel("Passphrase:"));
-        keyPanel.add(passphraseField);
+        keyPanel.add(passphraseField, "growx, wmin 160");
+        showPublicKeyButton = new JButton("Verify Key & Show Public Key");
+        showPublicKeyButton.addActionListener(e -> showPublicKey());
+        keyPanel.add(new JLabel(""));
+        keyPanel.add(showPublicKeyButton, "align left");
         panel.add(new JLabel(""));
         panel.add(keyPanel, "grow");
 
-        verifyHostKeyCheck = new JCheckBox("Verify host key (recommended)");
-        verifyHostKeyCheck.addActionListener(e -> updateHostKeyState());
+        verifyHostKeyCheck = new JCheckBox("Verify host key (strongly recommended)");
+        verifyHostKeyCheck.addActionListener(e -> onVerifyHostKeyToggled());
         panel.add(new JLabel("Host Key:"));
         panel.add(verifyHostKeyCheck);
 
@@ -202,6 +208,11 @@ public class SshTunnelDialog extends JDialog {
         hostKeyPanel.add(fetchHostKeyButton);
         panel.add(new JLabel(""));
         panel.add(hostKeyPanel, "grow");
+
+        var hostKeyHelp = new JLabel("<html><small>Pins the server's host key so a man-in-the-middle can be"
+                + " detected. Accepting it takes one click. Leave on for any connection carrying PHI.</small></html>");
+        panel.add(new JLabel(""));
+        panel.add(hostKeyHelp);
 
         keepAliveSpinner = new JSpinner(new SpinnerNumberModel(30, 0, 3600, 5));
         keepAliveCountSpinner = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
@@ -289,12 +300,87 @@ public class SshTunnelDialog extends JDialog {
         }
         revalidate();
         repaint();
+        // Resize to fit: compact for password, taller for a key. Only after the
+        // dialog exists, so the constructor's own pack() handles the first layout.
+        if (isDisplayable()) {
+            pack();
+        }
     }
 
     private void updateHostKeyState() {
         boolean verify = verifyHostKeyCheck.isSelected();
         fetchHostKeyButton.setEnabled(verify);
         hostKeyLabel.setEnabled(verify);
+    }
+
+    /** Warns hard before letting an admin turn host-key verification off. */
+    private void onVerifyHostKeyToggled() {
+        if (!verifyHostKeyCheck.isSelected()) {
+            var message = "<html><b>Turning off host key verification is bad practice for any real connection.</b>"
+                    + "<br><br>Without it the engine cannot tell the genuine server from an attacker who intercepts"
+                    + "<br>the tunnel, and anything sent through it, including PHI, can be read or altered in transit"
+                    + "<br>without detection.<br><br>This is safe only for throwaway lab testing. For anything else,"
+                    + "<br>cancel and click Fetch Host Key instead.</html>";
+            Object[] options = {"Keep verification on", "Disable anyway"};
+            int choice = JOptionPane.showOptionDialog(this, message, "Disable host key verification?",
+                    JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+            if (choice != 1) {
+                verifyHostKeyCheck.setSelected(true);
+            }
+        }
+        updateHostKeyState();
+    }
+
+    /** Verifies the passphrase decrypts the key and shows the public key to authorize. */
+    private void showPublicKey() {
+        var candidate = collectIntoCopy();
+        if (candidate.getAuthMethod() != AuthMethod.PRIVATE_KEY) {
+            JOptionPane.showMessageDialog(this, "Switch authentication to Private Key first.",
+                    "Not a key", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        showPublicKeyButton.setEnabled(false);
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return servlet.derivePublicKey(candidate);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    var publicKey = get();
+                    showCopyableText("Public Key",
+                            "Key verified. Add this line to ~/.ssh/authorized_keys on the SSH server:", publicKey);
+                } catch (Exception e) {
+                    log.error("Failed to derive public key", e);
+                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelDialog.this, e);
+                } finally {
+                    showPublicKeyButton.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private void showCopyableText(String title, String message, String text) {
+        var area = new JTextArea(text, 3, 50);
+        area.setEditable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(false);
+        area.setCaretPosition(0);
+
+        var copyButton = new JButton("Copy");
+        copyButton.addActionListener(e -> java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new java.awt.datatransfer.StringSelection(text), null));
+
+        var content = new JPanel(new BorderLayout(0, 8));
+        content.add(new JLabel(message), BorderLayout.NORTH);
+        content.add(new JScrollPane(area), BorderLayout.CENTER);
+        var south = new JPanel(new MigLayout("insets 0", "push[]"));
+        south.add(copyButton);
+        content.add(south, BorderLayout.SOUTH);
+
+        JOptionPane.showMessageDialog(this, content, title, JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void fetchHostKey() {

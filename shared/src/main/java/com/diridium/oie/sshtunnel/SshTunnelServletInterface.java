@@ -129,4 +129,13 @@ public interface SshTunnelServletInterface extends BaseServletInterface {
             @QueryParam("host") String host,
             @Param("port") @Parameter(description = "SSH server port", required = true)
             @QueryParam("port") int port) throws ClientException;
+
+    @POST
+    @Path("/_derivePublicKey")
+    @Operation(summary = "Derive the public key from a tunnel's private key, verifying the passphrase")
+    @MirthOperation(name = "derivePublicKey", display = "Derive SSH public key",
+            permission = SshTunnelPermissions.MANAGE, type = ExecuteType.SYNC)
+    String derivePublicKey(
+            @Param("tunnel") @Parameter(description = "Tunnel whose private key to read; masked secrets resolve against the stored tunnel with the same ID", required = true)
+            SshTunnel tunnel) throws ClientException;
 }

@@ -86,6 +86,9 @@ public class JschConnectionFactory implements SshConnectionFactory {
     public DiagnosticResult diagnose(SshTunnel tunnel, boolean alreadyLive) {
         var result = new DiagnosticResult();
 
+        // 0. Cheap configuration checks (no network, no crypto)
+        configPreChecks(result, tunnel);
+
         // 1. DNS resolution
         long t = System.nanoTime();
         try {
@@ -148,7 +151,7 @@ public class JschConnectionFactory implements SshConnectionFactory {
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
-            result.add("Authentication", StepStatus.FAIL, describeFailure(e, tunnel), ms(t));
+            result.add("Authentication", StepStatus.FAIL, describeFailure(e, tunnel), ms(t), authHint(e, tunnel));
             for (var forward : tunnel.getForwards()) {
                 result.add("Forward " + forward.describe(), StepStatus.SKIP, "not authenticated", 0);
             }
@@ -231,6 +234,171 @@ public class JschConnectionFactory implements SshConnectionFactory {
     private static String rootMessage(Throwable e) {
         var cause = e.getCause() != null ? e.getCause() : e;
         return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+    }
+
+    /** Cheap, network-free configuration sanity checks that surface common footguns. */
+    void configPreChecks(DiagnosticResult result, SshTunnel tunnel) {
+        // A local forward bound to anything but loopback exposes the forwarded
+        // port to the whole network the engine sits on. Works fine, so it is a
+        // warning, not a failure, and only fires when deliberately non-loopback.
+        for (var forward : tunnel.getForwards()) {
+            if (forward.getDirection() == ForwardDirection.LOCAL && !isLoopback(forward.getBindHost())) {
+                result.add("Forward bind exposure", StepStatus.WARN,
+                        "local forward " + forward.describe() + " binds a non-loopback address",
+                        0,
+                        "Binding " + forward.getBindHost() + " exposes this forwarded port to the whole"
+                                + " network, not just this host. Use 127.0.0.1 unless another host must reach it.");
+            }
+        }
+
+        if (tunnel.getAuthMethod() == AuthMethod.PRIVATE_KEY && tunnel.getKeySource() == KeySource.INLINE) {
+            var pem = tunnel.getPrivateKeyPem() == null ? "" : tunnel.getPrivateKeyPem().trim();
+            if (pem.startsWith("ssh-") || pem.startsWith("ecdsa-") || pem.contains("PUBLIC KEY")) {
+                result.add("Private key", StepStatus.WARN,
+                        "the pasted key looks like a public key, not a private key", 0,
+                        "Paste the PRIVATE key (the file without .pub, beginning with"
+                                + " '-----BEGIN OPENSSH PRIVATE KEY-----'). The public key is what you add to"
+                                + " the server, not what the tunnel authenticates with.");
+            } else if ((pem.contains("ENCRYPTED") || pem.contains("Proc-Type") || looksEncryptedOpenSsh(pem))
+                    && (tunnel.getPrivateKeyPassphrase() == null || tunnel.getPrivateKeyPassphrase().isEmpty())) {
+                result.add("Private key", StepStatus.WARN,
+                        "the pasted key looks encrypted but no passphrase was given", 0,
+                        "Enter the key's passphrase, or use an unencrypted key.");
+            }
+        }
+    }
+
+    /**
+     * True if a pasted OpenSSH-format private key is encrypted. That format keeps
+     * its cipher name inside the base64 body, so the legacy "ENCRYPTED"/"Proc-Type"
+     * markers never appear — we decode the header and check the cipher field.
+     * Unencrypted OpenSSH keys carry cipher "none", so this doesn't false-positive.
+     */
+    static boolean looksEncryptedOpenSsh(String pem) {
+        if (pem == null || !pem.contains("BEGIN OPENSSH PRIVATE KEY")) {
+            return false;
+        }
+        var begin = pem.indexOf("BEGIN OPENSSH PRIVATE KEY");
+        var bodyStart = pem.indexOf('\n', begin);
+        var end = pem.indexOf("-----END", bodyStart < 0 ? begin : bodyStart);
+        if (bodyStart < 0 || end < 0) {
+            return false;
+        }
+        try {
+            var base64 = pem.substring(bodyStart, end).replaceAll("\\s", "");
+            var data = Base64.getDecoder().decode(base64);
+            var magic = "openssh-key-v1\0".getBytes(StandardCharsets.US_ASCII); // 15 bytes
+            if (data.length < magic.length + 4) {
+                return false;
+            }
+            for (int i = 0; i < magic.length; i++) {
+                if (data[i] != magic[i]) {
+                    return false;
+                }
+            }
+            var p = magic.length;
+            var cipherLen = ((data[p] & 0xff) << 24) | ((data[p + 1] & 0xff) << 16)
+                    | ((data[p + 2] & 0xff) << 8) | (data[p + 3] & 0xff);
+            p += 4;
+            if (cipherLen < 0 || p + cipherLen > data.length) {
+                return false;
+            }
+            var cipher = new String(data, p, cipherLen, StandardCharsets.US_ASCII);
+            return !cipher.equals("none");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean isLoopback(String host) {
+        if (host == null) {
+            return false;
+        }
+        var h = host.trim();
+        return h.equals("127.0.0.1") || h.equals("::1") || h.equalsIgnoreCase("localhost");
+    }
+
+    /** Turns an auth failure into a next step, using the auth methods the server actually offered. */
+    static String authHint(Exception e, SshTunnel tunnel) {
+        var message = e.getMessage() != null ? e.getMessage() : "";
+        var methods = extractOfferedMethods(message);
+        var keyAuth = tunnel.getAuthMethod() == AuthMethod.PRIVATE_KEY;
+
+        if (keyAuth) {
+            if (methods != null && !methods.contains("publickey")) {
+                return "The server does not offer public-key authentication (it offers: " + methods
+                        + "). Enable PubkeyAuthentication on the server, or switch this tunnel to an offered method.";
+            }
+            return "The server accepts public-key auth but rejected this key. Add the tunnel's public key to"
+                    + " ~/.ssh/authorized_keys on the server (use \"Show Public Key\" in the edit dialog), and check"
+                    + " that ~/.ssh is mode 700 and authorized_keys is 600 — sshd ignores the file otherwise.";
+        }
+        if (methods != null && !methods.contains("password") && !methods.contains("keyboard-interactive")) {
+            return "The server does not offer password authentication (it offers: " + methods
+                    + "). Switch this tunnel to key-based auth.";
+        }
+        return "The password was rejected. Check the username and password; if they are correct, the account may be"
+                + " locked or password auth may be restricted for it.";
+    }
+
+    /** Pulls the method list out of JSch's "Auth fail for methods 'a,b,c'" message, or null. */
+    private static String extractOfferedMethods(String message) {
+        var marker = "for methods '";
+        var start = message.indexOf(marker);
+        if (start < 0) {
+            return null;
+        }
+        start += marker.length();
+        var end = message.indexOf('\'', start);
+        return end > start ? message.substring(start, end) : null;
+    }
+
+    @Override
+    public String derivePublicKey(SshTunnel tunnel) throws SshTunnelException {
+        if (tunnel.getAuthMethod() != AuthMethod.PRIVATE_KEY) {
+            throw new SshTunnelException("This tunnel does not use key-based authentication.");
+        }
+        var jsch = new JSch();
+        com.jcraft.jsch.KeyPair keyPair = null;
+        try {
+            if (tunnel.getKeySource() == KeySource.INLINE) {
+                var pem = tunnel.getPrivateKeyPem();
+                if (pem == null || pem.isBlank()) {
+                    throw new SshTunnelException("No private key has been provided.");
+                }
+                keyPair = com.jcraft.jsch.KeyPair.load(jsch, pem.getBytes(StandardCharsets.UTF_8), null);
+            } else {
+                var path = tunnel.getPrivateKeyPath();
+                if (path == null || path.isBlank()) {
+                    throw new SshTunnelException("No private key path has been provided.");
+                }
+                keyPair = com.jcraft.jsch.KeyPair.load(jsch, path);
+            }
+
+            var passphrase = tunnel.getPrivateKeyPassphrase();
+            if (passphrase != null && !passphrase.isEmpty()) {
+                keyPair.decrypt(passphrase);
+            }
+            if (keyPair.isEncrypted()) {
+                throw new SshTunnelException("Could not decrypt the private key."
+                        + (passphrase == null || passphrase.isEmpty()
+                                ? " It is passphrase-protected; enter the passphrase."
+                                : " Check the passphrase."));
+            }
+
+            var out = new java.io.ByteArrayOutputStream();
+            keyPair.writePublicKey(out, "oie-tunnel");
+            return out.toString(StandardCharsets.UTF_8).trim();
+        } catch (SshTunnelException e) {
+            throw e;
+        } catch (JSchException e) {
+            throw new SshTunnelException("Could not read the private key: " + rootMessage(e)
+                    + ". Make sure this is a private key in a supported format.", e);
+        } finally {
+            if (keyPair != null) {
+                keyPair.dispose();
+            }
+        }
     }
 
     @Override

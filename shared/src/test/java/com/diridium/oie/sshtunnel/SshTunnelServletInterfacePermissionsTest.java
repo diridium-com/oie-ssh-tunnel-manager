@@ -47,7 +47,7 @@ class SshTunnelServletInterfacePermissionsTest {
                 assertEquals(SshTunnelPermissions.MANAGE, permission, op.name() + " should require MANAGE");
             }
         }
-        assertEquals(10, operationCount, "unexpected number of annotated operations");
+        assertEquals(11, operationCount, "unexpected number of annotated operations");
     }
 
     @Test
@@ -59,6 +59,7 @@ class SshTunnelServletInterfacePermissionsTest {
         assertAuditable("stopTunnel", true);
         assertAuditable("testConnection", true);
         assertAuditable("fetchHostKey", true);
+        assertAuditable("derivePublicKey", true);
     }
 
     private void assertAuditable(String opName, boolean expected) {
