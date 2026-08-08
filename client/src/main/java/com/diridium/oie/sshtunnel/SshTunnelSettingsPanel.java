@@ -44,7 +44,6 @@ import org.slf4j.LoggerFactory;
 public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
 
     private static final Logger log = LoggerFactory.getLogger(SshTunnelSettingsPanel.class);
-    private static final int FAST_POLL_MS = 3000;
 
     private SshTunnelServletInterface servlet;
     private MirthTable table;
@@ -102,8 +101,11 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         btnDisable = disabled(new JButton("Disable"), e -> setEnabledState(false));
         btnStart = disabled(new JButton("Start"), e -> runControl(true));
         btnStop = disabled(new JButton("Stop"), e -> runControl(false));
+        var btnRefresh = new JButton("Refresh");
+        btnRefresh.setToolTipText("Reload tunnels and status now");
+        btnRefresh.addActionListener(e -> doRefresh());
 
-        var buttonPanel = new JPanel(new MigLayout("insets 0 12 0 12", "[][][][]push[][]12[][]", ""));
+        var buttonPanel = new JPanel(new MigLayout("insets 0 12 0 12", "[][][][]push[][]12[][]12[]", ""));
         buttonPanel.add(btnNew);
         buttonPanel.add(btnEdit);
         buttonPanel.add(btnDuplicate);
@@ -112,6 +114,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         buttonPanel.add(btnDisable);
         buttonPanel.add(btnStart);
         buttonPanel.add(btnStop);
+        buttonPanel.add(btnRefresh);
 
         var topPanel = new JPanel(new BorderLayout());
         topPanel.add(buttonPanel, BorderLayout.NORTH);
@@ -163,11 +166,8 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         }
     }
 
-    /** Fast while a tunnel is selected; otherwise the Administrator's Dashboard interval. */
+    /** The Administrator's own Dashboard refresh interval; no plugin-specific rate. */
     private int currentIntervalMs() {
-        if (table != null && table.getSelectedRow() >= 0) {
-            return FAST_POLL_MS;
-        }
         try {
             int seconds = Preferences.userNodeForPackage(Mirth.class).getInt("intervalTime", 10);
             return Math.max(2, seconds) * 1000;
@@ -178,12 +178,10 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
 
     private void onSelectionChanged() {
         updateButtonStates();
-        if (pollTimer != null) {
-            pollTimer.setDelay(currentIntervalMs());
-        }
         var selected = selectedTunnel();
+        // Show the selection immediately from cached data; the selected tunnel's
+        // event log fills in on the next refresh (auto or manual).
         diagnosticsPane.setSelection(selected, selected != null ? latestStatuses.get(selected.getId()) : null);
-        // Pull fresh data promptly for the new selection.
         if (isShowing()) {
             doRefresh();
         }

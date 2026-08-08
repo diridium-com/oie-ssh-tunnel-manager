@@ -59,7 +59,7 @@ Each tunnel has:
 - **Connection** — name, SSH host/port, username, authentication, host-key verification, and keep-alive settings.
 - **Forwards** — any number of local or reverse forwards, each with a bind host/port and a destination host/port.
 
-The settings tab is a live split view. The top is the tunnel table with a color-coded status column that updates on its own; the bottom is a diagnostics pane that follows the selected tunnel. It polls at the Administrator's Dashboard refresh interval while the tab is open, stepping up to a few seconds while a tunnel is selected so you can watch it in near-real-time.
+The settings tab is a split view. The top is the tunnel table with a color-coded status column; the bottom is a diagnostics pane that follows the selected tunnel. It auto-refreshes at the Administrator's own Dashboard refresh interval while the tab is open, and there's a **Refresh** button for an on-demand update.
 
 **Diagnostics.**
 
