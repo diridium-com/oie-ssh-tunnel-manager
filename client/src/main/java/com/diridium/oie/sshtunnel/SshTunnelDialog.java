@@ -73,6 +73,7 @@ public class SshTunnelDialog extends JDialog {
     private JCheckBox verifyHostKeyCheck;
     private JLabel hostKeyLabel;
     private JButton fetchHostKeyButton;
+    private JButton viewHostKeyButton;
 
     private JSpinner keepAliveSpinner;
     private JSpinner keepAliveCountSpinner;
@@ -201,10 +202,13 @@ public class SshTunnelDialog extends JDialog {
         panel.add(verifyHostKeyCheck);
 
         hostKeyLabel = new JLabel("No host key accepted");
+        viewHostKeyButton = new JButton("View...");
+        viewHostKeyButton.addActionListener(e -> viewHostKey());
         fetchHostKeyButton = new JButton("Fetch Host Key...");
         fetchHostKeyButton.addActionListener(e -> fetchHostKey());
-        var hostKeyPanel = new JPanel(new MigLayout("insets 0", "[grow,fill][]"));
+        var hostKeyPanel = new JPanel(new MigLayout("insets 0", "[grow,fill][][]"));
         hostKeyPanel.add(hostKeyLabel);
+        hostKeyPanel.add(viewHostKeyButton);
         hostKeyPanel.add(fetchHostKeyButton);
         panel.add(new JLabel(""));
         panel.add(hostKeyPanel, "grow");
@@ -282,11 +286,34 @@ public class SshTunnelDialog extends JDialog {
     }
 
     private void renderAcceptedHostKey() {
-        if (tunnel.getAcceptedHostKey() != null && !tunnel.getAcceptedHostKey().isEmpty()) {
-            hostKeyLabel.setText("Accepted: " + tunnel.getAcceptedHostKeyType());
+        boolean have = tunnel.getAcceptedHostKey() != null && !tunnel.getAcceptedHostKey().isEmpty();
+        if (have) {
+            hostKeyLabel.setText("Accepted: " + tunnel.getAcceptedHostKeyType() + "  " + acceptedFingerprint());
         } else {
             hostKeyLabel.setText("No host key accepted");
         }
+        viewHostKeyButton.setEnabled(have);
+    }
+
+    /** SHA256 fingerprint of the stored host key, computed client-side for display. */
+    private String acceptedFingerprint() {
+        try {
+            var keyBytes = java.util.Base64.getDecoder().decode(tunnel.getAcceptedHostKey());
+            var digest = java.security.MessageDigest.getInstance("SHA-256").digest(keyBytes);
+            return "SHA256:" + java.util.Base64.getEncoder().withoutPadding().encodeToString(digest);
+        } catch (Exception e) {
+            return "(fingerprint unavailable)";
+        }
+    }
+
+    private void viewHostKey() {
+        if (tunnel.getAcceptedHostKey() == null || tunnel.getAcceptedHostKey().isEmpty()) {
+            return;
+        }
+        showCopyableText("Accepted Host Key",
+                "Type: " + tunnel.getAcceptedHostKeyType() + "\nFingerprint: " + acceptedFingerprint()
+                        + "\n\nThis is the key connections are pinned to.",
+                tunnel.getAcceptedHostKeyType() + " " + tunnel.getAcceptedHostKey());
     }
 
     private void updateAuthVisibility() {

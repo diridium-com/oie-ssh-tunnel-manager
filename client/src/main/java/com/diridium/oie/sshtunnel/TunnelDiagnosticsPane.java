@@ -45,7 +45,6 @@ public class TunnelDiagnosticsPane extends JPanel {
     private final JRadioButton thisTunnelButton = new JRadioButton("This tunnel", true);
     private final JRadioButton allTunnelsButton = new JRadioButton("All tunnels");
     private final EventTableModel eventModel = new EventTableModel();
-    private final DiagnosticResultPanel testPanel = new DiagnosticResultPanel();
     private final JTabbedPane tabs = new JTabbedPane();
 
     private String selectedTunnelId;
@@ -56,7 +55,6 @@ public class TunnelDiagnosticsPane extends JPanel {
         super(new BorderLayout());
         tabs.addTab("Status", buildStatusTab());
         tabs.addTab("Event Log", buildEventTab());
-        tabs.addTab("Test Result", testPanel);
         add(tabs, BorderLayout.CENTER);
     }
 
@@ -149,11 +147,6 @@ public class TunnelDiagnosticsPane extends JPanel {
         this.tunnelNames = tunnelNames != null ? tunnelNames : Map.of();
         this.eventsByTunnel = eventsByTunnel != null ? eventsByTunnel : Map.of();
         refreshEvents();
-    }
-
-    public void showTestResult(DiagnosticResult result) {
-        testPanel.setResult(result);
-        tabs.setSelectedComponent(testPanel);
     }
 
     /** Whether the event log is currently showing all tunnels (so the poll fetches them all). */

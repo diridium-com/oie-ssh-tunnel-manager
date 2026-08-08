@@ -26,6 +26,40 @@ public class TunnelTableModel extends AbstractTableModel {
         fireTableDataChanged();
     }
 
+    /**
+     * Refreshes the data. If the same tunnels are present (same ids in order) it
+     * fires only row updates, which preserves the current selection — important
+     * for a live poll, since a full fireTableDataChanged would clear the
+     * selection and break Edit/Delete/etc. Returns true if it rebuilt the table
+     * (structure changed and the selection was reset).
+     */
+    public boolean refreshData(List<SshTunnel> tunnels, Map<String, SshTunnelStatus> statuses) {
+        var newTunnels = tunnels != null ? tunnels : new ArrayList<SshTunnel>();
+        var sameStructure = sameIds(this.tunnels, newTunnels);
+        this.tunnels = newTunnels;
+        this.statuses = statuses != null ? statuses : Map.of();
+        if (sameStructure) {
+            if (!newTunnels.isEmpty()) {
+                fireTableRowsUpdated(0, newTunnels.size() - 1);
+            }
+            return false;
+        }
+        fireTableDataChanged();
+        return true;
+    }
+
+    private static boolean sameIds(List<SshTunnel> a, List<SshTunnel> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!a.get(i).getId().equals(b.get(i).getId())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public SshTunnel getTunnelAt(int row) {
         return tunnels.get(row);
     }
