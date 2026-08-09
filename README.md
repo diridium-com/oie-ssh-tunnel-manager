@@ -29,8 +29,8 @@ Local forward (-L)
 
 Reverse forward (-R)
 
-  engine host                                      SSH server         partner network
-  channel TCP Listener ◄── 127.0.0.1:6662 ◄══SSH══ 0.0.0.0:6662 ◄──── partner app
+  engine host                                      SSH server             partner network
+  channel TCP Listener ◄── 127.0.0.1:6662 ◄══SSH══ 10.20.30.40:6662 ◄──── partner app
 ```
 
 **The engine is the SSH client.** Every tunnel is opened by the engine process on the engine host, dialing outbound in both cases above. The Administrator only configures, starts, and monitors tunnels, so nothing is forwarded to or from the workstation running it. Four things follow:
@@ -40,7 +40,7 @@ Reverse forward (-R)
 - **Key File Path** is a path on the engine host's filesystem. If the key only exists on your workstation, paste it into the Private Key field instead.
 - Tunnels belong to the engine, not to your Administrator session. They stay up after you close the Administrator or log out, and they stop when the engine stops.
 
-A reverse forward needs no inbound firewall opening on the engine host, which is usually why it gets approved. It does normally need a non-loopback bind on the SSH server, since the application that connects to the forwarded port rarely runs on that server itself, and that requires `GatewayPorts yes` or `clientspecified` in its `sshd_config`. The default of `no` binds loopback instead of refusing, so the forward tests clean while no traffic arrives. See the [Use Cases](https://github.com/diridium-com/oie-ssh-tunnel-manager/wiki/Use-Cases) wiki page for worked examples.
+A reverse forward needs no inbound firewall opening on the engine host, which is usually why it gets approved. It does normally need a non-loopback bind on the SSH server, since the application that connects to the forwarded port rarely runs on that server itself, and that requires `GatewayPorts clientspecified` in its `sshd_config`. The other two values override the address you configure: the default `no` narrows it to loopback, so the forward tests clean while no traffic arrives, and `yes` widens it to every interface on the server. See the [Use Cases](https://github.com/diridium-com/oie-ssh-tunnel-manager/wiki/Use-Cases) wiki page for worked examples.
 
 ## Requirements
 
