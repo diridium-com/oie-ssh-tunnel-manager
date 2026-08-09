@@ -22,13 +22,18 @@ JSch, XStream, and the test-only libraries must **not** appear — they are `pro
 
 ## Signing (optional)
 
-Signing is off by default. To produce a signed build, activate the `signing` profile with the YubiKey present:
+Signing is off by default and uses a YubiKey (PKCS#11) that holds the code-signing key.
+
+Prerequisites, which are present only at sign time and are **not** committed (both are in `.gitignore`):
+
+- `yubikey-pkcs11.cfg` and `certchain.pem` in the repo root. The `signing` profile resolves them as `${user.dir}/yubikey-pkcs11.cfg` and `${user.dir}/certchain.pem`, so run Maven from the repo root. These are the same two files the other signed OIE plugins use; copy them from one of those repos before signing.
+- The YubiKey plugged in. Pass its PIN with `-Dsigning.storepass=…` on the command line, which overrides the profile's `YUBIKEY_PIN` env-var default.
 
 ```bash
-YUBIKEY_PIN=…… mvn clean package -Psigning
+mvn clean install -Psigning -Dsigning.storepass=<yubikey-pin>
 ```
 
-Copy the signed zip out of `package/target/` immediately — a later `mvn clean` deletes it, and the signature cannot be regenerated without the hardware key.
+Copy the signed zip out of `package/target/` immediately — a later `mvn clean` deletes it, and the signature cannot be regenerated without the hardware key. If CI staged an unsigned draft, replace both the draft's zip and its `.sha256` sidecar so the digest matches the signed asset.
 
 ## Publishing a release
 
