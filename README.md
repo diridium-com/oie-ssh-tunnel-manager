@@ -22,13 +22,25 @@ Channels are untouched. A tunnel just exposes a forwarded port; point a normal T
 ## How it fits together
 
 ```
-  Engine host                         SSH server (vendor)
-  ┌───────────────────────┐           ┌───────────────────────┐
-  │ TCP Sender ──► 127.0.0.1:6661 ─────┼──► hl7.internal:6661   │   local (-L)
-  │                       │  SSH tunnel │                       │
-  │ hl7.internal:6662 ◄───┼─────────────┼── 0.0.0.0:6662 ◄─ vendor│  reverse (-R)
-  └───────────────────────┘           └───────────────────────┘
+Local forward (-L)
+
+  engine host                                    SSH server     target network
+  channel TCP Sender ──► 127.0.0.1:6661 ══SSH══► sshd ────────► hl7.internal:6661
+
+Reverse forward (-R)
+
+  engine host                                      SSH server         partner network
+  channel TCP Listener ◄── 127.0.0.1:6662 ◄══SSH══ 0.0.0.0:6662 ◄──── partner app
 ```
+
+**The engine is the SSH client.** Every tunnel is opened by the engine process on the engine host, dialing outbound in both cases above. The Administrator only configures, starts, and monitors tunnels, so nothing is forwarded to or from the workstation running it. Four things follow:
+
+- A local forward's bind address is the **engine host's**. `127.0.0.1:6661` is reachable by channels running in the engine, not from your workstation.
+- The **engine host** needs outbound access to the SSH server. Being able to `ssh` there from your own machine says nothing about whether the engine can. Test Connection runs on the engine for this reason, so its DNS, TCP, and host-key results are the engine's view of the network.
+- **Key File Path** is a path on the engine host's filesystem. If the key only exists on your workstation, paste it into the Private Key field instead.
+- Tunnels belong to the engine, not to your Administrator session. They stay up after you close the Administrator or log out, and they stop when the engine stops.
+
+A reverse forward needs no inbound firewall opening on the engine host, which is usually why it gets approved. Note that binding a non-loopback address on the remote side requires `GatewayPorts yes` in the SSH server's `sshd_config`; with the default of `no`, OpenSSH silently binds loopback instead and the forward tests clean while no traffic arrives. See the [Use Cases](https://github.com/diridium-com/oie-ssh-tunnel-manager/wiki/Use-Cases) wiki page for worked examples.
 
 ## Requirements
 
