@@ -9,10 +9,14 @@ All notable changes to the SSH Tunnel Manager plugin are recorded here.
 
 Initial release.
 
-An Open Integration Engine plugin that maintains persistent SSH tunnels from
-inside the engine, so a channel can reach a vendor over an SSH tunnel without a
-separate `ssh` process under systemd or an NT service. Addresses engine issue
-[#357](https://github.com/OpenIntegrationEngine/engine/issues/357).
+An Open Integration Engine plugin that gives the engine secure, self-healing SSH
+tunnels it manages on its own, with no separate `ssh` process under systemd or an
+NT service. A tunnel forwards a TCP port over SSH, so the engine can reach almost
+anything that speaks TCP, or be reached from almost anywhere, across network,
+firewall, and NAT boundaries: a database inside a private VPC, an HL7/MLLP
+endpoint or REST/FHIR API behind a bastion, a plaintext link wrapped in SSH as a
+VPN-lite, or a vendor pushing into a channel listener through a reverse forward.
+Addresses engine issue [#357](https://github.com/OpenIntegrationEngine/engine/issues/357).
 
 ### Tunnels
 - Local (`-L`) and reverse (`-R`) port forwards, kept connected for as long as a
