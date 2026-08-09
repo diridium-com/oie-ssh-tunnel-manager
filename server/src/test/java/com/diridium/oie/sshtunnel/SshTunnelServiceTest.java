@@ -293,7 +293,7 @@ class SshTunnelServiceTest {
     @Test
     void derivePublicKeyResolvesMaskAndReturnsKey() throws Exception {
         var factory = new Fakes.FakeSshConnectionFactory();
-        factory.derivedPublicKey = "ssh-ed25519 AAAATEST oie-tunnel";
+        factory.derivedPublicKey = "ssh-ed25519 AAAATEST mirth@vendor.example.com";
         var service = newService(new Fakes.FakeConfigStore(), factory);
 
         var keyTunnel = Fakes.passwordTunnel(null, "vendor");
@@ -305,7 +305,7 @@ class SshTunnelServiceTest {
         // Client re-derives from an edited tunnel still carrying the masked key.
         var edit = service.getTunnelsMasked().get(0);
         edit.setId(created.getId());
-        assertEquals("ssh-ed25519 AAAATEST oie-tunnel", service.derivePublicKey(edit));
+        assertEquals("ssh-ed25519 AAAATEST mirth@vendor.example.com", service.derivePublicKey(edit));
     }
 
     @Test
@@ -318,6 +318,42 @@ class SshTunnelServiceTest {
         keyTunnel.setKeySource(KeySource.INLINE);
         keyTunnel.setPrivateKeyPem("-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----");
         assertThrows(SshTunnelException.class, () -> service.derivePublicKey(keyTunnel));
+    }
+
+    @Test
+    void revealPrivateKeyReturnsStoredPlaintextForInlineKey() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+        var pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----";
+        var keyTunnel = Fakes.passwordTunnel(null, "vendor");
+        keyTunnel.setAuthMethod(AuthMethod.PRIVATE_KEY);
+        keyTunnel.setKeySource(KeySource.INLINE);
+        keyTunnel.setPrivateKeyPem(pem);
+        var created = service.create(keyTunnel);
+
+        // The masked GET hides it; reveal returns the real key.
+        assertEquals(SshTunnel.SECRET_MASK, service.getTunnelsMasked().get(0).getPrivateKeyPem());
+        assertEquals(pem, service.revealPrivateKey(created.getId()));
+    }
+
+    @Test
+    void revealPrivateKeyEmptyForFilePathAndPasswordAuth() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+
+        var fileKey = Fakes.passwordTunnel(null, "file-key");
+        fileKey.setAuthMethod(AuthMethod.PRIVATE_KEY);
+        fileKey.setKeySource(KeySource.FILE);
+        fileKey.setPrivateKeyPath("/etc/ssh/id_ed25519");
+        var fileCreated = service.create(fileKey);
+        assertEquals("", service.revealPrivateKey(fileCreated.getId()));
+
+        var pwCreated = service.create(tunnelOnPort("pw", 6670));
+        assertEquals("", service.revealPrivateKey(pwCreated.getId()));
+    }
+
+    @Test
+    void revealPrivateKeyUnknownIdThrows() {
+        var service = newService(new Fakes.FakeConfigStore(), new Fakes.FakeSshConnectionFactory());
+        assertThrows(NoSuchElementException.class, () -> service.revealPrivateKey("no-such-id"));
     }
 
     @Test

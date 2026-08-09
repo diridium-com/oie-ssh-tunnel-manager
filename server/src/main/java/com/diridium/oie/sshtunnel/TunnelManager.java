@@ -47,6 +47,7 @@ public class TunnelManager {
 
     private final SshConnectionFactory factory;
     private final LongSupplier clock;
+    private final TunnelAlertSink alertSink;
     private final ScheduledExecutorService executor;
 
     static final int MAX_EVENTS_PER_TUNNEL = 100;
@@ -70,12 +71,21 @@ public class TunnelManager {
     private volatile boolean closed;
 
     public TunnelManager(SshConnectionFactory factory) {
-        this(factory, System::currentTimeMillis);
+        this(factory, System::currentTimeMillis, TunnelAlertSink.NOOP);
+    }
+
+    public TunnelManager(SshConnectionFactory factory, TunnelAlertSink alertSink) {
+        this(factory, System::currentTimeMillis, alertSink);
     }
 
     TunnelManager(SshConnectionFactory factory, LongSupplier clock) {
+        this(factory, clock, TunnelAlertSink.NOOP);
+    }
+
+    TunnelManager(SshConnectionFactory factory, LongSupplier clock, TunnelAlertSink alertSink) {
         this.factory = factory;
         this.clock = clock;
+        this.alertSink = alertSink;
         this.executor = Executors.newSingleThreadScheduledExecutor(r -> {
             var t = new Thread(r, "ssh-tunnel-reconciler");
             t.setDaemon(true);
@@ -253,6 +263,10 @@ public class TunnelManager {
             }
             runtime.state = runtime.config.isEnabled() ? TunnelState.DISCONNECTED : TunnelState.DISABLED;
             runtime.nextRetryAt = 0;
+            // A deliberate stop/disable is not an outage: forget the prior health
+            // so a later re-enable alerts fresh (and never fires a spurious
+            // "recovered" for a manual restart).
+            runtime.lastHealth = Health.UNKNOWN;
             return;
         }
 
@@ -289,6 +303,12 @@ public class TunnelManager {
             recordEvent(runtime.config.getId(), TunnelEvent.Level.INFO,
                     "Connected to " + runtime.config.getEndpointDescription()
                             + " (" + runtime.config.getForwards().size() + " forward(s))");
+            // Only announce a recovery from a state we previously alerted as down;
+            // a routine first connect stays silent at the engine-alert level.
+            if (runtime.lastHealth == Health.DOWN) {
+                fireRecovered(runtime);
+            }
+            runtime.lastHealth = Health.UP;
         } catch (Exception e) {
             runtime.connection = null;
             runtime.connectedSince = 0;
@@ -300,6 +320,27 @@ public class TunnelManager {
                     runtime.config.getName(), runtime.failedAttempts, runtime.lastError);
             recordEvent(runtime.config.getId(), TunnelEvent.Level.ERROR,
                     "Attempt " + runtime.failedAttempts + " failed: " + runtime.lastError);
+            // Alert once on the edge into down, not on every backoff retry.
+            if (runtime.lastHealth != Health.DOWN) {
+                fireDown(runtime);
+            }
+            runtime.lastHealth = Health.DOWN;
+        }
+    }
+
+    private void fireDown(TunnelRuntime runtime) {
+        try {
+            alertSink.tunnelDown(runtime.config, runtime.lastError);
+        } catch (Exception e) {
+            log.warn("Alert sink threw on tunnelDown for '{}'", runtime.config.getName(), e);
+        }
+    }
+
+    private void fireRecovered(TunnelRuntime runtime) {
+        try {
+            alertSink.tunnelRecovered(runtime.config);
+        } catch (Exception e) {
+            log.warn("Alert sink threw on tunnelRecovered for '{}'", runtime.config.getName(), e);
         }
     }
 
@@ -348,6 +389,12 @@ public class TunnelManager {
         executor.submit(() -> { }).get(30, TimeUnit.SECONDS);
     }
 
+    /** Alert-level health, tracked separately from {@link TunnelState} so up/down
+     *  events fire only on real edges. UNKNOWN means "no edge to report yet". */
+    private enum Health {
+        UNKNOWN, UP, DOWN
+    }
+
     private static class TunnelRuntime {
 
         SshTunnel config;
@@ -358,6 +405,7 @@ public class TunnelManager {
         long connectedSince;
         int failedAttempts;
         long nextRetryAt;
+        Health lastHealth = Health.UNKNOWN;
 
         TunnelRuntime(SshTunnel config) {
             this.config = config;

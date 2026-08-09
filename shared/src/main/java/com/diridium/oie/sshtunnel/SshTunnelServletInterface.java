@@ -138,4 +138,13 @@ public interface SshTunnelServletInterface extends BaseServletInterface {
     String derivePublicKey(
             @Param("tunnel") @Parameter(description = "Tunnel whose private key to read; masked secrets resolve against the stored tunnel with the same ID", required = true)
             SshTunnel tunnel) throws ClientException;
+
+    @POST
+    @Path("/tunnels/{id}/_revealKey")
+    @Operation(summary = "Reveal a stored tunnel's plaintext private key for on-demand validation in the edit dialog")
+    @MirthOperation(name = "revealPrivateKey", display = "Reveal SSH private key",
+            permission = SshTunnelPermissions.MANAGE, type = ExecuteType.SYNC)
+    String revealPrivateKey(
+            @Param("id") @Parameter(description = "Tunnel ID", required = true)
+            @PathParam("id") String id) throws ClientException;
 }

@@ -28,6 +28,27 @@ class TunnelManagerTest {
         return manager;
     }
 
+    private TunnelManager newManager(TunnelAlertSink sink) {
+        manager = new TunnelManager(factory, clock::get, sink);
+        return manager;
+    }
+
+    /** Records the up/down edges the manager reports, for the alerting tests. */
+    private static final class RecordingSink implements TunnelAlertSink {
+        final List<String> downs = new java.util.ArrayList<>();
+        final List<String> recoveries = new java.util.ArrayList<>();
+
+        @Override
+        public void tunnelDown(SshTunnel tunnel, String reason) {
+            downs.add(tunnel.getId());
+        }
+
+        @Override
+        public void tunnelRecovered(SshTunnel tunnel) {
+            recoveries.add(tunnel.getId());
+        }
+    }
+
     @AfterEach
     void tearDown() {
         if (manager != null) {
@@ -286,6 +307,68 @@ class TunnelManagerTest {
         xs.allowTypesByWildcard(new String[] {"com.diridium.oie.sshtunnel.**"});
         var xml = xs.toXML(value);
         assertTrue(xs.fromXML(xml) != null, "should deserialize without ForbiddenClassException");
+    }
+
+    @Test
+    void alertsOnceWhenTunnelCannotConnect() throws Exception {
+        var sink = new RecordingSink();
+        newManager(sink);
+        factory.failOpen = true;
+
+        manager.applyTunnels(List.of(Fakes.passwordTunnel("t1", "vendor")));
+        manager.drainTasks();
+        assertEquals(List.of("t1"), sink.downs, "one down alert on the first failure edge");
+
+        // A second failed attempt after backoff must not re-alert.
+        clock.set(6000);
+        manager.reconcileNowAndWait();
+        assertEquals(2, factory.openCount.get());
+        assertEquals(List.of("t1"), sink.downs, "no repeat down alert on subsequent retries");
+        assertTrue(sink.recoveries.isEmpty());
+    }
+
+    @Test
+    void alertsRecoveryOnlyAfterAnOutage() throws Exception {
+        var sink = new RecordingSink();
+        newManager(sink);
+        factory.failOpen = true;
+        manager.applyTunnels(List.of(Fakes.passwordTunnel("t1", "vendor")));
+        manager.drainTasks();
+        assertEquals(List.of("t1"), sink.downs);
+
+        factory.failOpen = false;
+        clock.set(6000);
+        manager.reconcileNowAndWait();
+        assertEquals(TunnelState.CONNECTED, stateOf("t1"));
+        assertEquals(List.of("t1"), sink.recoveries, "one recovery alert after coming back up");
+    }
+
+    @Test
+    void noAlertsOnNormalStartupConnect() throws Exception {
+        var sink = new RecordingSink();
+        newManager(sink);
+
+        manager.applyTunnels(List.of(Fakes.passwordTunnel("t1", "vendor")));
+        manager.drainTasks();
+        assertEquals(TunnelState.CONNECTED, stateOf("t1"));
+        assertTrue(sink.downs.isEmpty(), "a first connect is not a recovery and must be silent");
+        assertTrue(sink.recoveries.isEmpty());
+    }
+
+    @Test
+    void transientReconnectDoesNotAlert() throws Exception {
+        var sink = new RecordingSink();
+        newManager(sink);
+        manager.applyTunnels(List.of(Fakes.passwordTunnel("t1", "vendor")));
+        manager.drainTasks();
+
+        // Drop the live session; the very next pass reconnects cleanly.
+        factory.opened.get(0).connected = false;
+        manager.reconcileNowAndWait();
+
+        assertEquals(TunnelState.CONNECTED, stateOf("t1"));
+        assertTrue(sink.downs.isEmpty(), "a blip that immediately reconnects is not an outage");
+        assertTrue(sink.recoveries.isEmpty());
     }
 
     @Test

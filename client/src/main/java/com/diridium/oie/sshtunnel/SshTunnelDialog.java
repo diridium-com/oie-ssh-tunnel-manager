@@ -50,7 +50,7 @@ public class SshTunnelDialog extends JDialog {
     private final transient SshTunnelServletInterface servlet;
     private final transient SshTunnel tunnel;
     private final transient java.util.Set<String> existingNames;
-    private final transient java.util.List<PortForward> otherLocalForwards;
+    private final transient java.util.List<NamedForward> otherLocalForwards;
     private boolean saved;
 
     private JTextField nameField;
@@ -67,10 +67,13 @@ public class SshTunnelDialog extends JDialog {
     private JPasswordField passphraseField;
     private JPanel passwordPanel;
     private JPanel keyPanel;
+    private JLabel keyPathLabel;
     private JPanel keyPathPanel;
+    private JLabel keyPemLabel;
     private JPanel keyPemPanel;
 
     private JButton showPublicKeyButton;
+    private JButton revealKeyButton;
     private JCheckBox verifyHostKeyCheck;
     private JLabel hostKeyLabel;
     private JButton fetchHostKeyButton;
@@ -84,7 +87,7 @@ public class SshTunnelDialog extends JDialog {
     private JButton testButton;
 
     public SshTunnelDialog(Frame parent, SshTunnelServletInterface servlet, SshTunnel tunnel,
-            java.util.Set<String> existingNames, java.util.List<PortForward> otherLocalForwards) {
+            java.util.Set<String> existingNames, java.util.List<NamedForward> otherLocalForwards) {
         super(parent, tunnel.getId() == null ? "New SSH Tunnel" : "Edit SSH Tunnel", true);
         this.servlet = servlet;
         this.tunnel = tunnel;
@@ -182,19 +185,31 @@ public class SshTunnelDialog extends JDialog {
         keyPemPanel = new JPanel(new MigLayout("insets 0", "[grow,fill]"));
         keyPemPanel.add(new JScrollPane(keyPemArea), "grow");
 
+        keyPathLabel = new JLabel("Key File Path:");
+        keyPemLabel = new JLabel("Private Key:");
         keyPanel = new JPanel(new MigLayout("insets 0, wrap 2, hidemode 3", "[right][grow,fill]"));
         keyPanel.add(new JLabel("Key Source:"));
         keyPanel.add(keySourceCombo, "w 200!");
-        keyPanel.add(new JLabel("Key File Path:"));
+        // Label and field are toggled together (see updateAuthVisibility): with
+        // hidemode 3 a hidden component leaves the grid entirely, so hiding only
+        // the field would shift every following cell one column and misalign the
+        // Passphrase row. Removing a whole 2-cell row keeps the wrap-2 parity.
+        keyPanel.add(keyPathLabel);
         keyPanel.add(keyPathPanel);
-        keyPanel.add(new JLabel("Private Key:"));
+        keyPanel.add(keyPemLabel);
         keyPanel.add(keyPemPanel, "grow");
         keyPanel.add(new JLabel("Passphrase:"));
         keyPanel.add(passphraseField, "growx, wmin 160");
         showPublicKeyButton = new JButton("Verify Key & Show Public Key");
         showPublicKeyButton.addActionListener(e -> showPublicKey());
+        revealKeyButton = new JButton("Reveal Stored Key");
+        revealKeyButton.setToolTipText("Fetch the stored private key from the server so you can validate it");
+        revealKeyButton.addActionListener(e -> revealStoredKey());
+        var keyButtons = new JPanel(new MigLayout("insets 0", "[][]"));
+        keyButtons.add(showPublicKeyButton);
+        keyButtons.add(revealKeyButton);
         keyPanel.add(new JLabel(""));
-        keyPanel.add(showPublicKeyButton, "align left");
+        keyPanel.add(keyButtons, "align left");
         panel.add(new JLabel(""));
         panel.add(keyPanel, "grow");
 
@@ -324,9 +339,12 @@ public class SshTunnelDialog extends JDialog {
         keyPanel.setVisible(!password);
         if (!password) {
             boolean file = keySourceCombo.getSelectedItem() == KeySource.FILE;
+            keyPathLabel.setVisible(file);
             keyPathPanel.setVisible(file);
+            keyPemLabel.setVisible(!file);
             keyPemPanel.setVisible(!file);
         }
+        updateRevealState();
         revalidate();
         repaint();
         // Resize to fit: compact for password, taller for a key. Only after the
@@ -340,6 +358,54 @@ public class SshTunnelDialog extends JDialog {
         boolean verify = verifyHostKeyCheck.isSelected();
         fetchHostKeyButton.setEnabled(verify);
         hostKeyLabel.setEnabled(verify);
+    }
+
+    /**
+     * Reveal only applies to an already-stored inline key that is still showing
+     * the mask. Nothing to reveal for a file-path key (the path is already
+     * visible), a brand-new tunnel, or a key the admin has already revealed or
+     * retyped.
+     */
+    private void updateRevealState() {
+        boolean inlineKey = authCombo.getSelectedItem() == AuthMethod.PRIVATE_KEY
+                && keySourceCombo.getSelectedItem() == KeySource.INLINE;
+        revealKeyButton.setVisible(inlineKey);
+        revealKeyButton.setEnabled(inlineKey && tunnel.getId() != null
+                && SshTunnel.SECRET_MASK.equals(keyPemArea.getText()));
+    }
+
+    /** Fetches the stored plaintext key from the server into the key box for validation. */
+    private void revealStoredKey() {
+        if (tunnel.getId() == null) {
+            return;
+        }
+        revealKeyButton.setEnabled(false);
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return servlet.revealPrivateKey(tunnel.getId());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    var pem = get();
+                    if (pem == null || pem.isEmpty()) {
+                        JOptionPane.showMessageDialog(SshTunnelDialog.this,
+                                "There is no stored inline private key to reveal.", "Nothing to reveal",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        return;
+                    }
+                    keyPemArea.setText(pem);
+                    keyPemArea.setCaretPosition(0);
+                } catch (Exception e) {
+                    log.error("Failed to reveal private key", e);
+                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelDialog.this, e);
+                } finally {
+                    updateRevealState();
+                }
+            }
+        }.execute();
     }
 
     /** Warns hard before letting an admin turn host-key verification off. */
@@ -457,6 +523,11 @@ public class SshTunnelDialog extends JDialog {
         }
         var candidate = collectIntoCopy();
         testButton.setEnabled(false);
+        // Open the dialog first, in a running state, then fill it in when the
+        // probe returns. The SSH diagnostic takes several seconds, and a dialog
+        // that only appears at the end reads as a hung, broken button. The modal
+        // dialog keeps pumping the EDT, so the worker's done() updates it live.
+        var dialog = new DiagnosticResultDialog(SshTunnelDialog.this);
         new SwingWorker<DiagnosticResult, Void>() {
             @Override
             protected DiagnosticResult doInBackground() throws Exception {
@@ -466,15 +537,16 @@ public class SshTunnelDialog extends JDialog {
             @Override
             protected void done() {
                 try {
-                    new DiagnosticResultDialog(SshTunnelDialog.this, get()).setVisible(true);
+                    dialog.showResult(get());
                 } catch (Exception e) {
                     log.error("Test connection failed", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelDialog.this, e);
+                    dialog.showError(e.getMessage() != null ? e.getMessage() : e.toString());
                 } finally {
                     testButton.setEnabled(true);
                 }
             }
         }.execute();
+        dialog.setVisible(true);
     }
 
     private void onSave() {
@@ -508,8 +580,9 @@ public class SshTunnelDialog extends JDialog {
         if (existingNames.contains(nameField.getText().trim().toLowerCase())) {
             return "A tunnel named '" + nameField.getText().trim() + "' already exists.";
         }
-        if (hostField.getText().isBlank()) {
-            return "SSH host is required.";
+        var hostError = Hosts.validationError("SSH host", hostField.getText(), false);
+        if (hostError != null) {
+            return hostError + ".";
         }
         if (usernameField.getText().isBlank()) {
             return "Username is required.";
@@ -533,14 +606,16 @@ public class SshTunnelDialog extends JDialog {
         }
         var forwards = forwardModel.getForwards();
         for (var forward : forwards) {
-            if (forward.getBindHost().isBlank()) {
-                return "Every forward needs a bind host.";
+            var bindError = Hosts.validationError("Forward bind host", forward.getBindHost(), true);
+            if (bindError != null) {
+                return bindError + ".";
             }
             if (forward.getBindPort() < 1 || forward.getBindPort() > 65535) {
                 return "Every forward needs a bind port between 1 and 65535.";
             }
-            if (forward.getDestinationHost().isBlank()) {
-                return "Every forward needs a destination host.";
+            var destError = Hosts.validationError("Forward destination host", forward.getDestinationHost(), false);
+            if (destError != null) {
+                return destError + ".";
             }
             if (forward.getDestinationPort() < 1 || forward.getDestinationPort() > 65535) {
                 return "Every forward needs a destination port between 1 and 65535.";
@@ -558,9 +633,10 @@ public class SshTunnelDialog extends JDialog {
         }
         for (var local : locals) {
             for (var other : otherLocalForwards) {
-                if (local.localBindCollidesWith(other)) {
+                if (local.localBindCollidesWith(other.forward())) {
                     return "Local forward " + local.getBindHost() + ":" + local.getBindPort()
-                            + " is already used by another tunnel on this host.";
+                            + " conflicts with tunnel '" + other.tunnelName()
+                            + "', which already forwards that port on this host.";
                 }
             }
         }

@@ -17,6 +17,9 @@
     <name>SSH Tunnel Manager Client</name>
 
     <properties>
+        <!-- Same SwingX 1.6.2 codebase the engine ships (its jar is labelled
+             1.6.2; "-2" is only a Maven republish qualifier, identical classes).
+             Do NOT "align" this to a bare 1.6.2, which may not resolve. -->
         <swingx-core.version>1.6.2-2</swingx-core.version>
     </properties>
 

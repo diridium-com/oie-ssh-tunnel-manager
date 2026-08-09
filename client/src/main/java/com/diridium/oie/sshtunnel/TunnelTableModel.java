@@ -15,8 +15,8 @@ public class TunnelTableModel extends AbstractTableModel {
     static final int COL_HOST_KEY = 4;
     static final int COL_STATUS = 5;
 
-    private static final String[] COLUMNS =
-            {"Name", "Endpoint", "Forwards", "Enabled", "Host Key", "Status", "Uptime", "Last Error"};
+    private static final String[] COLUMNS = {"Name", "Endpoint", "Forwards", "Enabled", "Host Key",
+            "Status", "Uptime", "Attempts", "Next Retry", "Last Error"};
 
     private List<SshTunnel> tunnels = new ArrayList<>();
     private Map<String, SshTunnelStatus> statuses = Map.of();
@@ -101,14 +101,30 @@ public class TunnelTableModel extends AbstractTableModel {
         return switch (column) {
             case 0 -> tunnel.getName();
             case 1 -> tunnel.getEndpointDescription();
-            case 2 -> tunnel.getForwards().size();
+            case 2 -> forwardSummary(tunnel);
             case 3 -> tunnel.isEnabled() ? "Yes" : "No";
             case 4 -> tunnel.isVerifyHostKey() ? "Pinned" : "Unverified";
             case COL_STATUS -> statusText(tunnel, status);
             case 6 -> uptimeText(status);
-            case 7 -> status != null && status.getLastError() != null ? status.getLastError() : "";
+            case 7 -> attemptsText(status);
+            case 8 -> nextRetryText(status);
+            case 9 -> status != null && status.getLastError() != null ? status.getLastError() : "";
             default -> "";
         };
+    }
+
+    /** Forwards broken out by direction, e.g. "2L / 1R" (local -L, remote -R). */
+    private static String forwardSummary(SshTunnel tunnel) {
+        int local = 0;
+        int remote = 0;
+        for (var forward : tunnel.getForwards()) {
+            if (forward.getDirection() == ForwardDirection.REMOTE) {
+                remote++;
+            } else {
+                local++;
+            }
+        }
+        return local + "L / " + remote + "R";
     }
 
     private String statusText(SshTunnel tunnel, SshTunnelStatus status) {
@@ -123,6 +139,21 @@ public class TunnelTableModel extends AbstractTableModel {
             return "";
         }
         return humanizeDuration(System.currentTimeMillis() - status.getConnectedSince());
+    }
+
+    private static String attemptsText(SshTunnelStatus status) {
+        if (status == null || status.getFailedAttempts() <= 0) {
+            return "";
+        }
+        return String.valueOf(status.getFailedAttempts());
+    }
+
+    private static String nextRetryText(SshTunnelStatus status) {
+        if (status == null || status.getNextRetryAt() <= 0) {
+            return "";
+        }
+        long delta = status.getNextRetryAt() - System.currentTimeMillis();
+        return delta <= 0 ? "now" : "in " + humanizeDuration(delta);
     }
 
     static String humanizeDuration(long millis) {

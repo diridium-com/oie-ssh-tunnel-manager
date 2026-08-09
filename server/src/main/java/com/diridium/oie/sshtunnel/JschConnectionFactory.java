@@ -42,7 +42,10 @@ public class JschConnectionFactory implements SshConnectionFactory {
     private static final int CONNECT_TIMEOUT_MS = 15000;
     private static final int FETCH_HOST_KEY_TIMEOUT_MS = 10000;
     private static final int TCP_TIMEOUT_MS = 8000;
-    private static final int CHANNEL_TIMEOUT_MS = 8000;
+    // Short: this only probes whether the destination answers through the tunnel.
+    // An unreachable destination shouldn't make the admin wait; it's a warning,
+    // not a tunnel fault.
+    private static final int FORWARD_PROBE_TIMEOUT_MS = 3000;
 
     @Override
     public SshConnection open(SshTunnel tunnel) throws SshTunnelException {
@@ -188,18 +191,21 @@ public class JschConnectionFactory implements SshConnectionFactory {
                 direct.setPort(forward.getDestinationPort());
                 direct.setOrgIPAddress("127.0.0.1");
                 direct.setOrgPort(0);
-                channel.connect(CHANNEL_TIMEOUT_MS);
+                channel.connect(FORWARD_PROBE_TIMEOUT_MS);
                 if (channel.isConnected()) {
                     result.add(label, StepStatus.PASS, "destination "
                             + forward.getDestinationHost() + ":" + forward.getDestinationPort()
                             + " reachable through the tunnel", ms(t));
                 } else {
-                    result.add(label, StepStatus.FAIL, "channel to destination did not open", ms(t));
+                    result.add(label, StepStatus.WARN, channelNotOpened(forward), ms(t));
                 }
             } catch (Exception e) {
-                result.add(label, StepStatus.FAIL, "destination "
-                        + forward.getDestinationHost() + ":" + forward.getDestinationPort()
-                        + " not reachable: " + rootMessage(e), ms(t));
+                // The SSH server answered with a channel-open failure. JSch collapses
+                // the RFC 4254 reason code, so we can't tell a down destination
+                // (CONNECT_FAILED) from a server forwarding policy block
+                // (ADMINISTRATIVELY_PROHIBITED). Name both; this is not a tunnel
+                // misconfiguration, so WARN rather than FAIL.
+                result.add(label, StepStatus.WARN, channelNotOpened(forward), ms(t));
             } finally {
                 if (channel != null) {
                     channel.disconnect();
@@ -225,6 +231,12 @@ public class JschConnectionFactory implements SshConnectionFactory {
                         + forward.getBindHost() + ":" + forward.getBindPort() + ": " + rootMessage(e), ms(t));
             }
         }
+    }
+
+    private static String channelNotOpened(PortForward forward) {
+        return "SSH server did not open a channel to " + forward.getDestinationHost() + ":"
+                + forward.getDestinationPort() + ". The destination may not be listening, or the"
+                + " server's forwarding policy (AllowTcpForwarding / PermitOpen) may be blocking it.";
     }
 
     private static long ms(long startNanos) {
@@ -387,7 +399,11 @@ public class JschConnectionFactory implements SshConnectionFactory {
             }
 
             var out = new java.io.ByteArrayOutputStream();
-            keyPair.writePublicKey(out, "oie-tunnel");
+            // Preserve whatever comment the key already carries — OpenSSH keys embed
+            // one (user@host by default), PEM/PKCS#8 keys carry none — exactly as
+            // `ssh-keygen -y` does. Don't invent a comment.
+            var comment = keyPair.getPublicKeyComment();
+            keyPair.writePublicKey(out, comment != null ? comment : "");
             return out.toString(StandardCharsets.UTF_8).trim();
         } catch (SshTunnelException e) {
             throw e;

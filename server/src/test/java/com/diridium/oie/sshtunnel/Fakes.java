@@ -90,7 +90,7 @@ final class Fakes {
         }
 
         volatile boolean failDerive;
-        volatile String derivedPublicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 oie-tunnel";
+        volatile String derivedPublicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 mirth@vendor.example.com";
 
         @Override
         public String derivePublicKey(SshTunnel tunnel) throws SshTunnelException {

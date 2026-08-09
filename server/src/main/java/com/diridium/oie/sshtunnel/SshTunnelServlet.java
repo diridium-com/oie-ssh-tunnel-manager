@@ -179,6 +179,21 @@ public class SshTunnelServlet extends MirthServlet implements SshTunnelServletIn
     }
 
     @Override
+    public String revealPrivateKey(String id) throws ClientException {
+        try {
+            var name = SshTunnelService.getInstance().getTunnelName(id);
+            var key = SshTunnelService.getInstance().revealPrivateKey(id);
+            dispatchEvent("Private Key Revealed", name);
+            return key;
+        } catch (NoSuchElementException e) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        } catch (Exception e) {
+            log.error("Failed to reveal private key for tunnel {}", id, e);
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
     public HostKeyInfo fetchHostKey(String host, int port) throws ClientException {
         try {
             var info = SshTunnelService.getInstance().fetchHostKey(host, port);

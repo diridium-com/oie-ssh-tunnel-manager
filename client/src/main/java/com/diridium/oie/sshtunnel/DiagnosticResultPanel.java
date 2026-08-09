@@ -13,6 +13,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
@@ -33,6 +34,7 @@ import net.miginfocom.swing.MigLayout;
 public class DiagnosticResultPanel extends JPanel {
 
     private final JLabel summary = new JLabel(" ");
+    private final JProgressBar progress = new JProgressBar();
     private final StepTableModel model = new StepTableModel();
     private final JTable table = new JTable(model);
     private final JTextArea detailArea = new JTextArea(4, 40);
@@ -42,6 +44,8 @@ public class DiagnosticResultPanel extends JPanel {
         super(new BorderLayout());
 
         summary.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+        progress.setIndeterminate(true);
+        progress.setVisible(false);
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(22);
@@ -71,11 +75,18 @@ public class DiagnosticResultPanel extends JPanel {
         split.setResizeWeight(0.62);
         split.setBorder(null);
 
-        add(summary, BorderLayout.NORTH);
+        var north = new JPanel(new BorderLayout());
+        north.add(summary, BorderLayout.CENTER);
+        var progressHolder = new JPanel(new MigLayout("insets 6 6 6 10, center"));
+        progressHolder.add(progress, "w 140!, h 14!");
+        north.add(progressHolder, BorderLayout.EAST);
+
+        add(north, BorderLayout.NORTH);
         add(split, BorderLayout.CENTER);
     }
 
     public void setResult(DiagnosticResult result) {
+        progress.setVisible(false);
         model.setResult(result);
         summary.setText((result.isSuccess() ? "✓ " : "✗ ") + result.getSummary());
         // Auto-select the first step that carries a hint (usually the failure),
@@ -95,10 +106,22 @@ public class DiagnosticResultPanel extends JPanel {
         }
     }
 
-    public void clear() {
+    /** Running state: spinner in the top bar, empty table below, ready to fill in. */
+    public void showRunning() {
         model.setResult(new DiagnosticResult());
-        summary.setText(" ");
+        summary.setText("Running connection test…");
         detailArea.setText("");
+        copyButton.setEnabled(false);
+        progress.setVisible(true);
+    }
+
+    /** Shows a message when the test call itself failed to run (not a diagnostic step). */
+    public void showError(String message) {
+        progress.setVisible(false);
+        model.setResult(new DiagnosticResult());
+        summary.setText("✗ The connection test could not run.");
+        detailArea.setText(message != null ? message : "");
+        detailArea.setCaretPosition(0);
         copyButton.setEnabled(false);
     }
 

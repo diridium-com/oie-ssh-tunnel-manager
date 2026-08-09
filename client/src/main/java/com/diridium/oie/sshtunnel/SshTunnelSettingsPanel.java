@@ -367,15 +367,16 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         return names;
     }
 
-    /** LOCAL forwards of all tunnels except excludeId, for bind-port collision checks. */
-    private List<PortForward> otherLocalForwards(String excludeId) {
-        var result = new java.util.ArrayList<PortForward>();
+    /** LOCAL forwards of all tunnels except excludeId, each tagged with its owning
+     *  tunnel's name so a bind-port collision can name the conflicting tunnel. */
+    private List<NamedForward> otherLocalForwards(String excludeId) {
+        var result = new java.util.ArrayList<NamedForward>();
         for (int i = 0; i < tableModel.getRowCount(); i++) {
             var tunnel = tableModel.getTunnelAt(i);
             if (excludeId == null || !excludeId.equals(tunnel.getId())) {
                 for (var forward : tunnel.getForwards()) {
                     if (forward.getDirection() == ForwardDirection.LOCAL) {
-                        result.add(forward);
+                        result.add(new NamedForward(tunnel.getName(), forward));
                     }
                 }
             }

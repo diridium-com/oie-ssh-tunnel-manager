@@ -14,22 +14,24 @@
     <packaging>pom</packaging>
 
     <properties>
-        <revision>1.0.4</revision>
+        <revision>1.0.0</revision>
 
         <plugin.supported.mc.versions>${mc.version}</plugin.supported.mc.versions>
 
         <mc.version>4.6.0</mc.version>
-        <!-- The engine ships this exact jsch in server-lib; provided scope, never bundle. -->
+        <!-- The provided libs below are pinned to the exact versions OIE 4.6.0
+             ships (verified against the engine's server-lib/client-lib). The
+             engine provides them at runtime, so pinning a different version means
+             compiling against one class shape and running against another. Do
+             NOT bump these independently of the engine. -->
         <jsch.version>2.27.7</jsch.version>
-        <javax-servlet.version>4.0.1</javax-servlet.version>
+        <javax-servlet.version>3.1.0</javax-servlet.version>
         <javax-rs-api.version>2.0.1</javax-rs-api.version>
-        <swagger-annotations.version>2.1.9</swagger-annotations.version>
-        <log4j.version>2.17.2</log4j.version>
-        <!-- Matches the slf4j-api the engine ships in server-lib/donkey -->
+        <swagger-annotations.version>2.0.10</swagger-annotations.version>
         <slf4j.version>1.7.30</slf4j.version>
-        <commons-lang3.version>3.12.0</commons-lang3.version>
+        <commons-lang3.version>3.20.0</commons-lang3.version>
         <xstream.version>1.4.20</xstream.version>
-        <miglayout.version>5.3</miglayout.version>
+        <miglayout.version>4.2</miglayout.version>
         <junit5.version>5.10.2</junit5.version>
         <mockito.version>5.11.0</mockito.version>
         <surefire.version>3.2.5</surefire.version>
@@ -107,12 +109,6 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-api</artifactId>
-            <version>${log4j.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
@@ -124,6 +120,10 @@
             <version>${slf4j.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- No direct imports here, but Mirth's OperationUtil (called from the
+             plugin's permission wiring) needs commons-lang3 ArrayUtils at
+             runtime. The engine provides it; keep it on the compile/test
+             classpath. Do not remove as "unused". -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>

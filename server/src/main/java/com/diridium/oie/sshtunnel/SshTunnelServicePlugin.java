@@ -36,7 +36,8 @@ public class SshTunnelServicePlugin implements ServicePlugin {
         log.info("Starting SSH Tunnel Manager plugin");
         SerializationController.registerSerializableClasses();
         var factory = new JschConnectionFactory();
-        SshTunnelService.init(new SshTunnelService(new EngineConfigStore(), new TunnelManager(factory), factory));
+        var manager = new TunnelManager(factory, new EngineAlertSink());
+        SshTunnelService.init(new SshTunnelService(new EngineConfigStore(), manager, factory));
     }
 
     @Override

@@ -19,16 +19,20 @@ import javax.swing.KeyStroke;
 import net.miginfocom.swing.MigLayout;
 
 /**
- * Modal wrapper around {@link DiagnosticResultPanel} for the edit dialog's Test
- * Connection, where results can't render into the settings tab behind the modal.
+ * Modal view of a connection test. Opens immediately showing the real results
+ * layout with a spinner in the top bar, so a multi-second SSH probe doesn't look
+ * like a hung, broken button, then fills in the body when results arrive.
+ * Results can't render into the settings tab behind the modal edit dialog, which
+ * is why this is a separate dialog.
  */
 public class DiagnosticResultDialog extends JDialog {
 
-    public DiagnosticResultDialog(Window parent, DiagnosticResult result) {
+    private final DiagnosticResultPanel panel = new DiagnosticResultPanel();
+
+    public DiagnosticResultDialog(Window parent) {
         super(parent, "Connection Test", ModalityType.APPLICATION_MODAL);
 
-        var panel = new DiagnosticResultPanel();
-        panel.setResult(result);
+        panel.showRunning();
 
         var close = new JButton("Close");
         close.addActionListener(e -> dispose());
@@ -51,5 +55,15 @@ public class DiagnosticResultDialog extends JDialog {
 
         setSize(new Dimension(700, 460));
         setLocationRelativeTo(parent);
+    }
+
+    /** Fills in the finished results (the one-time refresh). */
+    public void showResult(DiagnosticResult result) {
+        panel.setResult(result);
+    }
+
+    /** Shows a message when the test call itself failed to run. */
+    public void showError(String message) {
+        panel.showError(message);
     }
 }

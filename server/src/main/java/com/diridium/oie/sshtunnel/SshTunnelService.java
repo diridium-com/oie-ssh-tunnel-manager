@@ -172,6 +172,19 @@ public class SshTunnelService {
         return manager.getEvents(id);
     }
 
+    /**
+     * Returns the stored plaintext inline private key for on-demand reveal in the
+     * edit dialog (secrets are masked on the normal GET). Empty when the tunnel
+     * has no inline key. MANAGE-gated and audited at the servlet.
+     */
+    public synchronized String revealPrivateKey(String id) {
+        var tunnel = findById(id);
+        if (tunnel.getAuthMethod() != AuthMethod.PRIVATE_KEY || tunnel.getKeySource() != KeySource.INLINE) {
+            return "";
+        }
+        return tunnel.getPrivateKeyPem() != null ? tunnel.getPrivateKeyPem() : "";
+    }
+
     /** Derives the public key for the given (possibly unsaved) tunnel's private key. */
     public String derivePublicKey(SshTunnel incoming) throws SshTunnelException {
         SshTunnel stored;
@@ -283,7 +296,7 @@ public class SshTunnelService {
      */
     private void validate(SshTunnel tunnel, String selfId) {
         requireNonBlank(tunnel.getName(), "Name");
-        requireNonBlank(tunnel.getHost(), "Host");
+        requireValidHost("SSH host", tunnel.getHost(), false);
         requireNonBlank(tunnel.getUsername(), "Username");
         requirePort(tunnel.getPort(), "SSH port");
 
@@ -305,8 +318,8 @@ public class SshTunnelService {
         }
 
         for (var forward : tunnel.getForwards()) {
-            requireNonBlank(forward.getBindHost(), "Forward bind host");
-            requireNonBlank(forward.getDestinationHost(), "Forward destination host");
+            requireValidHost("Forward bind host", forward.getBindHost(), true);
+            requireValidHost("Forward destination host", forward.getDestinationHost(), false);
             requirePort(forward.getBindPort(), "Forward bind port");
             requirePort(forward.getDestinationPort(), "Forward destination port");
         }
@@ -362,6 +375,13 @@ public class SshTunnelService {
     private static void requireNonBlank(String value, String field) {
         if (isBlank(value)) {
             throw new IllegalArgumentException(field + " is required");
+        }
+    }
+
+    private static void requireValidHost(String field, String value, boolean allowWildcard) {
+        var error = Hosts.validationError(field, value, allowWildcard);
+        if (error != null) {
+            throw new IllegalArgumentException(error);
         }
     }
 
