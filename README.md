@@ -40,7 +40,7 @@ Reverse forward (-R)
 - **Key File Path** is a path on the engine host's filesystem. If the key only exists on your workstation, paste it into the Private Key field instead.
 - Tunnels belong to the engine, not to your Administrator session. They stay up after you close the Administrator or log out, and they stop when the engine stops.
 
-A reverse forward needs no inbound firewall opening on the engine host, which is usually why it gets approved. Note that binding a non-loopback address on the remote side requires `GatewayPorts yes` in the SSH server's `sshd_config`; with the default of `no`, OpenSSH silently binds loopback instead and the forward tests clean while no traffic arrives. See the [Use Cases](https://github.com/diridium-com/oie-ssh-tunnel-manager/wiki/Use-Cases) wiki page for worked examples.
+A reverse forward needs no inbound firewall opening on the engine host, which is usually why it gets approved. It does normally need a non-loopback bind on the SSH server, since the application that connects to the forwarded port rarely runs on that server itself, and that requires `GatewayPorts yes` or `clientspecified` in its `sshd_config`. The default of `no` binds loopback instead of refusing, so the forward tests clean while no traffic arrives. See the [Use Cases](https://github.com/diridium-com/oie-ssh-tunnel-manager/wiki/Use-Cases) wiki page for worked examples.
 
 ## Requirements
 
