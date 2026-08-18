@@ -5,3 +5,8 @@ target/
 wiki/
 yubikey-pkcs11.cfg
 certchain.pem
+
+# Web administrator UI build
+webadmin/node_modules/
+webadmin/web/plugin.js
+node/

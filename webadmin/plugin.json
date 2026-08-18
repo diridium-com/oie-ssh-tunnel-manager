@@ -1,0 +1,9 @@
+{
+    "id": "oie-ssh-tunnel-manager",
+    "name": "SSH Tunnel Manager",
+    "version": "1.1.0",
+    "author": "Diridium Technologies Inc.",
+    "description": "Managed SSH tunnels for channel connectivity: define tunnels with local and remote forwards, host-key pinning, and key or password auth; watch live connection status; start, stop, and diagnose from the browser. Web administrator UI for the oie-ssh-tunnel-manager engine plugin.",
+    "oie": { "apiMin": "4.6" },
+    "client": { "entry": "web/plugin.js" }
+}
