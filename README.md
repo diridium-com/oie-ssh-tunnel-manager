@@ -49,16 +49,14 @@ A reverse forward needs no inbound firewall opening on the engine host. It does 
 
 ## Building
 
-The plugin compiles against five engine jars. For a local build, install them from a sibling `engine/` checkout:
+The plugin compiles against five engine jars. Install them once per engine version, then build:
 
 ```bash
-ENGINE_DIR=/path/to/engine ./scripts/install-engine-jars.sh
+./scripts/install-engine-jars.sh
 mvn clean package
 ```
 
-The installable plugin zip is written to `package/target/oie-ssh-tunnel-manager-<version>.zip`.
-
-CI installs the same jars from the published OIE distribution tarball instead of a checkout; see `.github/workflows/build.yml`.
+The script takes the jars from the published OIE release matching the POM's `mc.version`, checked against that release's `sha256sums`; CI installs the same jars from the same tarball. The installable plugin zip is written to `package/target/oie-ssh-tunnel-manager-<version>.zip`.
 
 ## Installing
 
