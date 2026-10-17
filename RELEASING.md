@@ -34,7 +34,7 @@ The `signing` profile also needs `yubikey-pkcs11.cfg` and `certchain.pem` in the
 mvn clean install -Psigning -Dsigning.storepass=<yubikey-pin>
 ```
 
-Copy `package/target/oie-ssh-tunnel-manager-X.Y.Z.zip` somewhere safe right away. A later `mvn clean` deletes it, and it cannot be rebuilt without the key.
+The signed zip is `package/target/oie-ssh-tunnel-manager-X.Y.Z.zip`. Run the commands below and in step 4 from `package/target/`.
 
 Check what is in the zip: the three plugin jars, `plugin.xml`, and `webadmin/` (`plugin.json` and `web/plugin.js`), and nothing else. JSch, XStream, and the test-only libraries must **not** appear; they are `provided` or `test` scope and the engine supplies them at runtime.
 
