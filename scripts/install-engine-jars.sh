@@ -23,7 +23,7 @@ if ! command -v zip >/dev/null 2>&1; then
     exit 1
 fi
 
-MC_VERSION="$(mvn -q -N help:evaluate -Dexpression=mc.version -DforceStdout)"
+MC_VERSION="$(mvn -q -N org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=mc.version -DforceStdout)"
 if [[ -z "${MC_VERSION}" ]]; then
     echo "error: could not read mc.version from pom.xml" >&2
     exit 1
@@ -87,7 +87,7 @@ for entry in "${JARS[@]}"; do
     # no signature files to delete, which is fine.
     zip -q -d "${jar_path}" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' >/dev/null 2>&1 || [[ $? -eq 12 ]]
     echo "installing ${artifact}-${MC_VERSION}"
-    mvn -q install:install-file \
+    mvn -q org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file \
         -Dfile="${jar_path}" \
         -DgroupId=com.mirth.connect \
         -DartifactId="${artifact}" \
