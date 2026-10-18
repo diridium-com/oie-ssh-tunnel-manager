@@ -58,6 +58,19 @@ mvn clean package
 
 The script takes the jars from the published OIE release matching the POM's `mc.version`, checked against that release's `sha256sums`; CI installs the same jars from the same tarball. The installable plugin zip is written to `package/target/oie-ssh-tunnel-manager-<version>.zip`.
 
+### End-to-end tests
+
+`e2e/run.py` installs a built zip into the released OIE engine through the engine's own installer and runs its tunnels against a real OpenSSH server in Docker, on a real database: a fresh install that exercises every feature (password and pasted-key tunnels, local and remote forwards carrying traffic, host-key pinning, the diagnostic, stop and start, reconnecting after the server drops the session and after an engine restart, secrets masked and encrypted at rest), an upgrade from each release in `e2e/upgrade-sources.txt` (a release built for an older engine runs on that engine first, from `e2e/engines.txt`, and the engine is upgraded under it), an uninstall, and an install alongside [Role-Based Access Control](https://github.com/diridium-com/role-based-access-control) (the release in `e2e/rbac-source.txt`), where every endpoint must need the permission it declares. CI runs it on every push and pull request against Derby, PostgreSQL, MySQL, SQL Server (jTDS and Microsoft drivers) and Oracle, with the engine on Java 17 and on Java 21. While a release targets an engine that isn't published yet, CI runs it on the POM's `mc.version` engine with `--label-as`, which installs copies of the zips whose `plugin.xml` names that engine instead.
+
+Locally it needs Java 17 or later, Docker, `ssh-keygen`, and the distribution tarball of the engine the zip is built for (the `mirthVersion` in its `plugin.xml`). When that is the POM's `mc.version`, `scripts/install-engine-jars.sh` leaves a checked copy in `target/oie-dist/`; a `mvn clean` of the whole project deletes it, so run the script again after one:
+
+```bash
+python3 e2e/run.py --db postgres --zip package/target/oie-ssh-tunnel-manager-<version>.zip \
+    --tarball target/oie-dist/oie_unix_4_6_0.tar.gz --work /tmp/ssh-e2e-1
+```
+
+`--work` must not exist yet. Each engine and its logs stay there. For a zip built for an engine that isn't published yet, use the `mc.version` tarball and add `--label-as <mc.version>`, as CI does.
+
 ## Installing
 
 Install `oie-ssh-tunnel-manager-<version>.zip` through the Administrator's Extensions page, then restart the engine. The **SSH Tunnel Manager** tab appears under Settings.
