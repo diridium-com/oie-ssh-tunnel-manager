@@ -31,7 +31,9 @@ automatic retry with backoff — and channels just connect to the local forward.
 
 ## Compatibility
 
-Requires Open Integration Engine **4.6.0+** (Java 17+). The web administrator
-UI requires a web admin build 4.6+ with the Web Support plugin on the engine.
+Requires Open Integration Engine **4.7.0** (Java 17 or 21). Running OIE 4.6.0?
+Use [1.1.0](https://github.com/diridium-com/oie-ssh-tunnel-manager/releases/tag/v1.1.0).
+The web administrator UI requires an OIE web administrator and a Web Support
+plugin release for OIE 4.7.0.
 A restart is required after install. Safe to install with or without the web
 administrator.

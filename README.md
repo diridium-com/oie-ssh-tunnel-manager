@@ -44,8 +44,8 @@ A reverse forward needs no inbound firewall opening on the engine host. It does 
 
 ## Requirements
 
-- Open Integration Engine 4.6.0
-- Java 17
+- Open Integration Engine 4.7.0. Running OIE 4.6.0? Use [SSH Tunnel Manager 1.1.0](https://github.com/diridium-com/oie-ssh-tunnel-manager/releases/tag/v1.1.0).
+- Java 17 or 21 (the OIE 4.7.0 installers bundle Java 21)
 
 ## Building
 
