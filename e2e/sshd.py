@@ -101,9 +101,13 @@ class SshServer:
         return self._next_port
 
     def read_from(self, port):
-        """What a client inside the container reads from 127.0.0.1:port, or None if it can't connect."""
-        result = docker("exec", self.container, "nc", "-w", "5", "127.0.0.1", str(port), check=False, timeout=30)
-        return result.stdout.strip() if result.returncode == 0 else None
+        """The first line a client inside the container reads from 127.0.0.1:port, or "" if none came.
+
+        The client keeps its end open until it has the line. One that half-closed at once (nc with empty
+        input) lost the reply through a remote forward in 66 of 300 reads, and in none of 100 made directly."""
+        result = docker("exec", self.container, "sh", "-c",
+                        f"timeout 10 sh -c 'sleep 3 | nc 127.0.0.1 {port} | head -n 1'", check=False, timeout=30)
+        return result.stdout.strip()
 
     def drop_sessions(self):
         """Ends every client session, the way a server restart or network cut would. sshd itself keeps
