@@ -2,5 +2,7 @@
 # A release built for an older engine than the zip under test starts on that engine (engines.txt).
 # A release joins this list in the next release's PR: added right after its own release, it would only
 # test that release reinstalled over itself.
-# 1.0.0: the first signed release.
+# 1.1.0: the previous signed release, built for OIE 4.6.0.
+# 1.0.0: the first signed release, built for OIE 4.6.0.
 1.0.0 b7cb364735d04d86c226c67db9613d56964ea22b197c901486bb0e19bd87501e https://github.com/diridium-com/oie-ssh-tunnel-manager/releases/download/v1.0.0/oie-ssh-tunnel-manager-1.0.0.zip
+1.1.0 4f1596c25e5f0a676c3a24fb4a536754fa74b60a396cc12b13a1e9d7e7b7b353 https://github.com/diridium-com/oie-ssh-tunnel-manager/releases/download/v1.1.0/oie-ssh-tunnel-manager-1.1.0.zip

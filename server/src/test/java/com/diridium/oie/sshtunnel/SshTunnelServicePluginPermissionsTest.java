@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
@@ -65,5 +67,28 @@ class SshTunnelServicePluginPermissionsTest {
                 + "/" + TaskConstants.SETTINGS_REFRESH;
         assertTrue(List.of(view.getTaskNames()).contains(expectedTask),
                 "view should gate the settings tab via " + expectedTask);
+    }
+
+    @Test
+    void managePermissionCarriesSettingsSaveTask() {
+        var perms = new SshTunnelServicePlugin().getExtensionPermissions();
+        var manage = find(perms, SshTunnelPermissions.MANAGE);
+
+        // Both Administrators show the tab's change buttons only when this task is allowed.
+        var expectedTask = TaskConstants.SETTINGS_KEY_PREFIX + SshTunnelServletInterface.PLUGIN_NAME
+                + "/" + TaskConstants.SETTINGS_SAVE;
+        assertEquals(List.of(expectedTask), List.of(manage.getTaskNames()));
+        assertEquals(expectedTask, SshTunnelPermissions.SETTINGS_TASK_GROUP + "/" + TaskConstants.SETTINGS_SAVE);
+    }
+
+    @Test
+    void webAdministratorAsksForTheSameTasks() throws Exception {
+        // The web panel hides its change buttons on this check; a renamed group or task would show them
+        // to every role again.
+        var panel = Files.readString(Path.of("..", "webadmin", "web", "tunnel-panel.jsx"));
+        assertTrue(panel.contains("const TUNNEL_GROUP = '" + SshTunnelPermissions.SETTINGS_TASK_GROUP + "';"),
+                "tunnel-panel.jsx TUNNEL_GROUP");
+        assertTrue(panel.contains("platform.checkTask(TUNNEL_GROUP, '" + TaskConstants.SETTINGS_SAVE + "')"),
+                "tunnel-panel.jsx canManage check");
     }
 }
