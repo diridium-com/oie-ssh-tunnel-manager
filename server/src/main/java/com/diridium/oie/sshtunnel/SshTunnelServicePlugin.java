@@ -60,7 +60,8 @@ public class SshTunnelServicePlugin implements ServicePlugin {
     public ExtensionPermission[] getExtensionPermissions() {
         // Operation names are derived by reflection so an operation added to the
         // servlet interface later cannot ship unregistered. The settings-tab
-        // composite task name lets RBAC hide the tab from users without view.
+        // composite task names let RBAC hide the tab from users without view,
+        // and the tab's change buttons from users without manage.
         return new ExtensionPermission[] {
                 new ExtensionPermission(
                         SshTunnelServletInterface.PLUGIN_NAME,
@@ -69,8 +70,7 @@ public class SshTunnelServicePlugin implements ServicePlugin {
                         OperationUtil.getOperationNamesForPermission(
                                 SshTunnelPermissions.VIEW, SshTunnelServletInterface.class),
                         new String[] {
-                                TaskConstants.SETTINGS_KEY_PREFIX + SshTunnelServletInterface.PLUGIN_NAME
-                                        + "/" + TaskConstants.SETTINGS_REFRESH
+                                SshTunnelPermissions.SETTINGS_TASK_GROUP + "/" + TaskConstants.SETTINGS_REFRESH
                         }),
                 new ExtensionPermission(
                         SshTunnelServletInterface.PLUGIN_NAME,
@@ -78,7 +78,9 @@ public class SshTunnelServicePlugin implements ServicePlugin {
                         "Create, edit, delete, start, and stop SSH tunnels",
                         OperationUtil.getOperationNamesForPermission(
                                 SshTunnelPermissions.MANAGE, SshTunnelServletInterface.class),
-                        new String[0])
+                        new String[] {
+                                SshTunnelPermissions.SETTINGS_TASK_GROUP + "/" + TaskConstants.SETTINGS_SAVE
+                        })
         };
     }
 }

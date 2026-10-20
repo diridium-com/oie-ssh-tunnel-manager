@@ -52,6 +52,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
     private Timer pollTimer;
     private Timer burstTimer;
 
+    private JButton btnNew;
     private JButton btnEdit;
     private JButton btnDuplicate;
     private JButton btnDelete;
@@ -59,6 +60,8 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
     private JButton btnDisable;
     private JButton btnStart;
     private JButton btnStop;
+    /** Whether the user's role may change tunnels; the change buttons show only when it may. */
+    private boolean canManage = true;
 
     private Map<String, SshTunnelStatus> latestStatuses = Map.of();
     /** EDT-only: bumped per refresh so a slow worker's result can't clobber a newer one. */
@@ -89,13 +92,13 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2 && table.getSelectedRowCount() == 1) {
+                if (canManage && e.getClickCount() == 2 && table.getSelectedRowCount() == 1) {
                     editTunnel();
                 }
             }
         });
 
-        var btnNew = new JButton("New");
+        btnNew = new JButton("New");
         btnNew.addActionListener(e -> newTunnel());
         btnEdit = disabled(new JButton("Edit"), e -> editTunnel());
         btnDuplicate = disabled(new JButton("Duplicate"), e -> duplicateTunnel());
@@ -118,6 +121,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         buttonPanel.add(btnStart);
         buttonPanel.add(btnStop);
         buttonPanel.add(btnRefresh);
+        applyRoleAccess();
 
         var topPanel = new JPanel(new BorderLayout());
         topPanel.add(buttonPanel, BorderLayout.NORTH);
@@ -140,6 +144,14 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                 }
             }
         });
+    }
+
+    /** Shows the change buttons only to a role that may change tunnels (see RoleAccess). */
+    private void applyRoleAccess() {
+        canManage = RoleAccess.canManage();
+        for (var button : new JButton[] {btnNew, btnEdit, btnDuplicate, btnDelete, btnEnable, btnDisable, btnStart, btnStop}) {
+            button.setVisible(canManage);
+        }
     }
 
     private JButton disabled(JButton button, java.awt.event.ActionListener action) {
@@ -224,6 +236,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
         if (isShowing()) {
             startPolling();
         }
+        applyRoleAccess();
         var selected = selectedTunnel();
         boolean allEvents = diagnosticsPane.isShowingAllTunnels();
         final long seq = ++refreshSeq;
@@ -447,7 +460,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                     burstRefresh();
                 } catch (Exception e) {
                     log.error("Failed to save tunnel", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
+                    RoleAccess.alertFailure(SshTunnelSettingsPanel.this, e);
                 }
             }
         }.execute();
@@ -478,7 +491,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                     doRefresh();
                 } catch (Exception e) {
                     log.error("Failed to delete tunnel", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
+                    RoleAccess.alertFailure(SshTunnelSettingsPanel.this, e);
                 }
             }
         }.execute();
@@ -508,7 +521,7 @@ public class SshTunnelSettingsPanel extends AbstractSettingsPanel {
                     burstRefresh();
                 } catch (Exception e) {
                     log.error("Failed to control tunnel", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelSettingsPanel.this, e);
+                    RoleAccess.alertFailure(SshTunnelSettingsPanel.this, e);
                 }
             }
         }.execute();

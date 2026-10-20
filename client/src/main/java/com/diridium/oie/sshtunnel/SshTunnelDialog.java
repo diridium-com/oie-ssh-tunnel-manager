@@ -31,8 +31,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingWorker;
 
-import com.mirth.connect.client.ui.PlatformUI;
-
 import net.miginfocom.swing.MigLayout;
 
 import org.slf4j.Logger;
@@ -400,7 +398,7 @@ public class SshTunnelDialog extends JDialog {
                     keyPemArea.setCaretPosition(0);
                 } catch (Exception e) {
                     log.error("Failed to reveal private key", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelDialog.this, e);
+                    RoleAccess.alertFailure(SshTunnelDialog.this, e);
                 } finally {
                     updateRevealState();
                 }
@@ -449,7 +447,7 @@ public class SshTunnelDialog extends JDialog {
                             "Key verified. Add this line to ~/.ssh/authorized_keys on the SSH server:", publicKey);
                 } catch (Exception e) {
                     log.error("Failed to derive public key", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelDialog.this, e);
+                    RoleAccess.alertFailure(SshTunnelDialog.this, e);
                 } finally {
                     showPublicKeyButton.setEnabled(true);
                 }
@@ -509,7 +507,7 @@ public class SshTunnelDialog extends JDialog {
                     }
                 } catch (Exception e) {
                     log.error("Failed to fetch host key", e);
-                    PlatformUI.MIRTH_FRAME.alertThrowable(SshTunnelDialog.this, e);
+                    RoleAccess.alertFailure(SshTunnelDialog.this, e);
                 } finally {
                     fetchHostKeyButton.setEnabled(verifyHostKeyCheck.isSelected());
                 }
@@ -540,7 +538,8 @@ public class SshTunnelDialog extends JDialog {
                     dialog.showResult(get());
                 } catch (Exception e) {
                     log.error("Test connection failed", e);
-                    dialog.showError(e.getMessage() != null ? e.getMessage() : e.toString());
+                    dialog.showError(RoleAccess.isRefusal(e) ? RoleAccess.REFUSED
+                            : e.getMessage() != null ? e.getMessage() : e.toString());
                 } finally {
                     testButton.setEnabled(true);
                 }
