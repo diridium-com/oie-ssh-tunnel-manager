@@ -103,8 +103,9 @@ class SshServer:
     def read_from(self, port):
         """The first line a client inside the container reads from 127.0.0.1:port, or "" if none came.
 
-        The client keeps its end open until it has the line. One that half-closed at once (nc with empty
-        input) lost the reply through a remote forward in 66 of 300 reads, and in none of 100 made directly."""
+        The client keeps its end open until it has the line, the way real clients do. With nc and empty input,
+        which half-closes at once, replies through the remote forward went missing in some runs (66 of 300 reads
+        on 2026-10-18) and in none the next day (100 of 100). The cause was not found (docs/design-notes.md)."""
         result = docker("exec", self.container, "sh", "-c",
                         f"timeout 10 sh -c 'sleep 3 | nc 127.0.0.1 {port} | head -n 1'", check=False, timeout=30)
         return result.stdout.strip()
