@@ -56,7 +56,7 @@ The plugin compiles against five engine jars. Install them once per engine versi
 mvn clean package
 ```
 
-The script takes the jars from the published OIE release matching the POM's `mc.version`, checked against that release's `sha256sums`; CI installs the same jars from the same tarball. The installable plugin zip is written to `package/target/oie-ssh-tunnel-manager-<version>.zip`.
+The script takes the jars from the published OIE release matching the POM's `mc.version`, checked against the SHA-256 pinned in the POM (`oie.dist.sha256`); CI runs the same script. The installable plugin zip is written to `package/target/oie-ssh-tunnel-manager-<version>.zip`.
 
 ### End-to-end tests
 

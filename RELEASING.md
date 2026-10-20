@@ -97,4 +97,4 @@ On the Diridium dev VM, the `publish-to-oie-store` Claude Code skill does this e
 
 ## Engine version bumps
 
-When targeting a new engine version, update `<mc.version>`, re-run the pre-flight checks (no direct xerces use, Java 17, XML through the JDK parser), and follow the compat-release policy: a minor plugin bump, a clean break to the new engine only, and keep the previous release available for users on the older engine.
+When targeting a new engine version, update `<mc.version>` and `<oie.dist.sha256>` (from the release's `sha256sums`), re-run the pre-flight checks (no direct xerces use, Java 17, XML through the JDK parser), and follow the compat-release policy: a minor plugin bump, a clean break to the new engine only, and keep the previous release available for users on the older engine.
