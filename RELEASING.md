@@ -57,7 +57,7 @@ mvn clean package -Psigning -Dsigning.storepass="$PIN"
 unset PIN
 ```
 
-`read -s` takes the PIN without echoing it or leaving it in your shell history. The variable isn't exported, so only Maven gets the PIN, not the processes the build starts (npm, and the install scripts it runs).
+`read -s` takes the PIN without echoing it or leaving it in your shell history. The variable isn't exported, so the processes the build starts (npm, and the install scripts it runs) don't inherit it. The PIN is still on Maven's command line while the build runs, where `ps` shows it; without the YubiKey it signs nothing.
 
 The signed zip is `package/target/oie-ssh-tunnel-manager-X.Y.Z.zip`. Run the commands below and in step 4 from `package/target/`.
 

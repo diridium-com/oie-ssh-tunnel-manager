@@ -121,3 +121,11 @@ A second review pass over the diagnostics/live-pane rework confirmed three more,
 - The client that reads a remote forward from inside the SSH server keeps its end open until it has the first line, the way real clients do. With `nc` and empty input, which half-closes at once, replies through the remote forward went missing in some runs (66 of 300 reads on 2026-10-18) and in none on the next day (100 of 100, through the plugin and through OpenSSH's own `ssh -R`). The cause was not found.
 
 Still not covered: the Swing and web administrators, a private key read from a file on the server, binds to non-loopback addresses, and a network that goes silent without closing the connection.
+
+## 2026-10-20: expected build warnings
+
+`mvn clean package` prints three warnings, all harmless:
+
+- `1 problem was encountered while building the effective model for org.javassist:javassist:jar:3.19.0-GA`. javassist comes in through `org.reflections:reflections` 0.9.10, a test dependency the engine's `OperationUtil` needs when the permission tests call `getExtensionPermissions()` (see the comment in `server/pom.xml`). The problem is in javassist's own POM.
+- `JAR will be empty - no content was marked for inclusion!`. The package module exists to build the zip, and its own jar has nothing in it.
+- `Parameter 'finalName' is read-only, must not be used in configuration`. It comes from the assembly plugin's `finalName` in `package/pom.xml`, which still names the zip as configured.
