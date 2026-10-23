@@ -5,7 +5,7 @@
 tunnels connecting to a real SSH server.
 
     python3 e2e/run.py --db postgres --zip package/target/oie-ssh-tunnel-manager-<version>.zip \\
-        --tarball oie_unix_4_6_0.tar.gz --work /tmp/ssh-e2e-1
+        --tarball oie_unix_4_7_0.tar.gz --work /tmp/ssh-e2e-1
 
 Databases: derby, postgres, mysql, sqlserver (jTDS driver), sqlserver-ms (Microsoft driver), oracle.
 Needs Java 17 or later (JAVA_HOME or --java-home) for the engine, Docker for the SSH server and every
