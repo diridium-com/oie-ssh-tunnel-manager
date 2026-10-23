@@ -75,6 +75,12 @@ python3 e2e/run.py --db postgres --zip package/target/oie-ssh-tunnel-manager-<ve
 
 Install `oie-ssh-tunnel-manager-<version>.zip` through the Administrator's Extensions page, then restart the engine. The **SSH Tunnel Manager** tab appears under Settings.
 
+## Learn more
+
+New to SSH tunnels? Matthy de Hoog has written a free course, [SSH Tunnel Manager for Eclipse OIE](https://eclipse-oie.moodiy.cloud/course/view.php?id=18), that explains tunnels from the ground up, with hands-on exercises on a test server, a final test and a certificate. Thanks, Matthy, for putting it together.
+
+**About this link.** The course is a third-party resource, written and run by its author. Diridium Technologies Inc. does not create, review, maintain or endorse its content, and makes no representation or warranty, express or implied, that it is accurate, complete or current; it was written for release 1.1.0 and may not match the version you run. This README, the project wiki and the release notes are the reference for this plugin. The course site requires an account, and its own terms and [privacy policy](https://eclipse-oie.moodiy.cloud/admin/tool/policy/viewall.php) govern your use of it and your data. Diridium does not operate the site and accepts no responsibility for its content, availability, or how it handles your information. The link is provided for convenience only. "Eclipse" is a trademark of the Eclipse Foundation, Inc.; Diridium and this project are not affiliated with or endorsed by the Eclipse Foundation.
+
 ## Configuration
 
 Each tunnel has:
