@@ -66,7 +66,7 @@ Locally it needs Java 17 or later, Docker, `ssh-keygen`, and the distribution ta
 
 ```bash
 python3 e2e/run.py --db postgres --zip package/target/oie-ssh-tunnel-manager-<version>.zip \
-    --tarball target/oie-dist/oie_unix_4_6_0.tar.gz --work /tmp/ssh-e2e-1
+    --tarball target/oie-dist/oie_unix_4_7_0.tar.gz --work /tmp/ssh-e2e-1
 ```
 
 `--work` must not exist yet. Each engine and its logs stay there. For a zip built for an engine that isn't published yet, use the `mc.version` tarball and add `--label-as <mc.version>`, as CI does.
