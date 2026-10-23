@@ -80,19 +80,26 @@ for entry in "${JARS[@]}"; do
     jar_path="${DIST_DIR}/${entry#*:}"
     # The release's client-lib jars are signed by the OIE project and its
     # server-lib jars are not. The com.mirth.connect.plugins package spans
-    # mirth-client and mirth-client-core, so loading a class from each in one
-    # test JVM throws a signer-mismatch SecurityException. Strip the signatures
-    # from the extracted copies (the tarball itself is never modified); they
-    # mean nothing for a compile/test dependency. zip exits 12 when a jar has
-    # no signature files to delete, which is fine.
+    # mirth-server (ServicePlugin) and mirth-client (SettingsPanelPlugin), so
+    # loading a class from each in one test JVM throws a signer-mismatch
+    # SecurityException. Strip the signatures from the extracted copies (the
+    # tarball itself is never modified); they mean nothing for a compile/test
+    # dependency. zip exits 12 when a jar has no signature files to delete,
+    # which is fine.
+    #
+    # The copies are installed under the classifier "unsigned", which the POMs
+    # depend on. Other projects install the release's jars, signed, under the
+    # plain coordinates of the same local repository; under their own
+    # classifier these can't be replaced that way.
     zip -q -d "${jar_path}" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' >/dev/null 2>&1 || [[ $? -eq 12 ]]
-    echo "installing ${artifact}-${MC_VERSION}"
+    echo "installing ${artifact}-${MC_VERSION}-unsigned"
     mvn -q org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file \
         -Dfile="${jar_path}" \
         -DgroupId=com.mirth.connect \
         -DartifactId="${artifact}" \
         -Dversion="${MC_VERSION}" \
+        -Dclassifier=unsigned \
         -Dpackaging=jar
 done
 
-echo "done. ${#JARS[@]} jars installed at version ${MC_VERSION}."
+echo "done. ${#JARS[@]} jars installed at version ${MC_VERSION}, classifier unsigned."
