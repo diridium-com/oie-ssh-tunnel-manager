@@ -13,16 +13,11 @@
 # The tarball is checked against the SHA-256 in the POM (oie.dist.sha256) before
 # anything is installed. It is downloaded into $OIE_DIST_CACHE when set (CI
 # caches that directory), otherwise target/oie-dist/ (gitignored, reused until
-# the next mvn clean). Works on Linux and macOS; needs zip (see below).
+# the next mvn clean). Works on Linux and macOS.
 
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-
-if ! command -v zip >/dev/null 2>&1; then
-    echo "error: zip is required to strip the engine jars' signatures (see the comment below)" >&2
-    exit 1
-fi
 
 MC_VERSION="$(mvn -q -N org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=mc.version -DforceStdout)"
 if [[ -z "${MC_VERSION}" ]]; then
@@ -78,28 +73,18 @@ tar -xzf "${DIST_DIR}/${TARBALL}" -C "${DIST_DIR}" "${members[@]}"
 for entry in "${JARS[@]}"; do
     artifact="${entry%%:*}"
     jar_path="${DIST_DIR}/${entry#*:}"
-    # The release's client-lib jars are signed by the OIE project and its
-    # server-lib jars are not. The com.mirth.connect.plugins package spans
-    # mirth-server (ServicePlugin) and mirth-client (SettingsPanelPlugin), so
-    # loading a class from each in one test JVM throws a signer-mismatch
-    # SecurityException. Strip the signatures from the extracted copies (the
-    # tarball itself is never modified); they mean nothing for a compile/test
-    # dependency. zip exits 12 when a jar has no signature files to delete,
-    # which is fine.
-    #
-    # The copies are installed under the classifier "unsigned", which the POMs
-    # depend on. Other projects install the release's jars, signed, under the
-    # plain coordinates of the same local repository; under their own
-    # classifier these can't be replaced that way.
-    zip -q -d "${jar_path}" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' >/dev/null 2>&1 || [[ $? -eq 12 ]]
-    echo "installing ${artifact}-${MC_VERSION}-unsigned"
+    # Installed exactly as the release ships them, under the same coordinates
+    # the other Diridium plugins use, so every project sharing the local
+    # repository gets the same bytes. The release signs mirth-client and not
+    # mirth-server; PluginXmlWiringTest loads each side with its own class
+    # loader, as the engine and the Administrator do, so that doesn't matter.
+    echo "installing ${artifact}-${MC_VERSION}"
     mvn -q org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file \
         -Dfile="${jar_path}" \
         -DgroupId=com.mirth.connect \
         -DartifactId="${artifact}" \
         -Dversion="${MC_VERSION}" \
-        -Dclassifier=unsigned \
         -Dpackaging=jar
 done
 
-echo "done. ${#JARS[@]} jars installed at version ${MC_VERSION}, classifier unsigned."
+echo "done. ${#JARS[@]} jars installed at version ${MC_VERSION}."
