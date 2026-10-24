@@ -51,7 +51,6 @@
             <groupId>com.mirth.connect</groupId>
             <artifactId>mirth-client</artifactId>
             <version>${mc.version}</version>
-            <classifier>unsigned</classifier>
             <scope>provided</scope>
         </dependency>
     </dependencies>
